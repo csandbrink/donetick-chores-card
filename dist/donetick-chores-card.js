@@ -87,8 +87,18 @@ class DonetickChoresCard extends HTMLElement {
     return { rows: "auto", columns: "full", min_columns: 6 };
   }
 
-  static getStubConfig() {
-    return { todo_entity: "todo.all_tasks", title: "Aufgaben" };
+  // HA ruft getStubConfig(hass, entities, entitiesFallback) auf, wenn die Karte
+  // aus der Kartenauswahl heraus angelegt wird. Bisher wurde todo.all_tasks fest
+  // zurueckgegeben - das passt nur zufaellig und nur in einer Installation, in der
+  // die Entity genau so heisst.
+  static getStubConfig(hass) {
+    const states = hass?.states || {};
+    const donetickTodo = Object.keys(states).find(
+      (entityId) =>
+        entityId.startsWith("todo.") &&
+        Array.isArray(states[entityId]?.attributes?.circle_members)
+    );
+    return { todo_entity: donetickTodo || "todo.all_tasks", title: "Aufgaben" };
   }
 
   _tasks() {
@@ -148,7 +158,7 @@ class DonetickChoresCard extends HTMLElement {
   _dueText(value) {
     if (!value) return "Ohne Termin";
     const due = new Date(value);
-    if (Number.isNaN(due.getTime())) return "";
+    if (Number.isNaN(due.getTime())) return "Termin ungültig";
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
