@@ -11,8 +11,6 @@ class DonetickChoresCard extends HTMLElement {
     this._statusMessage = "";
     this._draft = { title: "", description: "", due: "", frequencyType: "once", priority: "0" };
     this._completedTasks = new Map();
-    this._lastDataSignature = null;
-    this._renderPending = false;
   }
 
   setConfig(config) {
@@ -28,41 +26,39 @@ class DonetickChoresCard extends HTMLElement {
   }
 
   set hass(hass) {
-    const signature = this._dataSignature(hass);
-    const relevantChange = signature !== this._lastDataSignature;
+    const previous = this._hass;
     this._hass = hass;
-    if (!relevantChange) return;
-    this._lastDataSignature = signature;
-    if (this._dialogOpen) {
-      this._renderPending = true;
-      return;
-    }
-    this._renderPending = false;
+    if (previous && !this._relevantChange(previous, hass)) return;
+    if (this._dialogOpen) return;
     this._render();
   }
 
-  _dataSignature(hass) {
-    if (!hass || !this._config) return "";
-    const todo = hass.states?.[this._config.todo_entity];
-    const members = Array.isArray(todo?.attributes?.circle_members)
-      ? todo.attributes.circle_members.map((member) => [Number(member.user_id), member.display_name])
-      : [];
-    const tasks = Object.values(hass.states || {})
-      .filter((state) => state.entity_id?.startsWith(this._config.sensor_prefix))
-      .map((state) => [
-        state.entity_id,
-        state.state,
-        state.attributes?.task_id,
-        state.attributes?.assigned_to_user_id,
-        state.attributes?.is_active,
-        state.attributes?.next_due_date,
-      ])
-      .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
-    return JSON.stringify({
-      configEntryId: todo?.attributes?.config_entry_id,
-      members,
-      tasks,
-    });
+  // Home Assistant tauscht bei jedem Update das states-Objekt aus, behaelt aber
+  // die State-Objekte unveraenderter Entities per Referenz bei. Ein
+  // Referenzvergleich der relevanten Entities reicht daher aus - ohne
+  // Zwischenarrays, ohne sort, ohne JSON.stringify.
+  _relevantChange(previous, next) {
+    if (!this._config) return true;
+    // HA erzeugt das hass-Objekt auch dann neu, wenn sich kein State geaendert
+    // hat (Theme, Verbindungsstatus, Panel-Wechsel).
+    if (previous.states === next.states) return false;
+    const previousStates = previous.states || {};
+    const nextStates = next.states || {};
+    if (previousStates[this._config.todo_entity] !== nextStates[this._config.todo_entity]) {
+      return true;
+    }
+    const prefix = this._config.sensor_prefix;
+    let nextCount = 0;
+    for (const entityId in nextStates) {
+      if (!entityId.startsWith(prefix)) continue;
+      nextCount += 1;
+      if (previousStates[entityId] !== nextStates[entityId]) return true;
+    }
+    let previousCount = 0;
+    for (const entityId in previousStates) {
+      if (entityId.startsWith(prefix)) previousCount += 1;
+    }
+    return previousCount !== nextCount;
   }
 
   getCardSize() {
