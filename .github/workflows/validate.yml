@@ -23,13 +23,17 @@ jobs:
           #   Beide entfernen, falls die Karte je in den HACS-Index soll.
           ignore: brands images
 
-  syntax:
-    name: JS syntax
+  test:
+    name: Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: node --check
-        run: node --check dist/donetick-chores-card.js
+          cache: npm
+      - run: npm ci
+      - name: Syntaxpruefung
+        run: npm run check
+      - name: Testsuite
+        run: npm test

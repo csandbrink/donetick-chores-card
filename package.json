@@ -1,0 +1,15 @@
+{
+  "name": "donetick-chores-card",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Home Assistant Lovelace-Karte für Donetick-Aufgaben mit Auswahl des Erledigers",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/",
+    "check": "node --check dist/donetick-chores-card.js"
+  },
+  "devDependencies": {
+    "jsdom": "^30.0.1"
+  }
+}
