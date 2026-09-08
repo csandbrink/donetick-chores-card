@@ -1,61 +1,64 @@
 # Changelog
 
-Das Format orientiert sich an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/),
-die Versionierung an [Semantic Versioning](https://semver.org/lang/de/).
+Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [1.1.0] – 2026-09-08
 
-Vollständige Überarbeitung auf Grundlage eines Code Reviews. Die Konfiguration
-der Karte ändert sich nicht – bestehende Dashboards laufen unverändert weiter.
+A full pass over the card following a code review. **The card's configuration
+is unchanged** — existing dashboards keep working as they are.
 
-### Behoben
+### Fixed
 
-- **Doppelte Erledigung.** Nach dem Buchen stand die Aufgabe unverändert und
-  ohne Rückmeldung in der Liste, weil der Donetick-Coordinator den Sensor erst
-  verzögert aktualisiert. Der zweite Klick ging als zweite Buchung durch. Die
-  Karte führt gebuchte Aufgaben jetzt sichtbar als „Gebucht – warte auf
-  Donetick …", bis die Buchung bestätigt ist.
-- **Stumm verschluckte Klicks.** Solange eine Buchung lief, verwarf die Karte
-  Klicks auf *jede* andere Aufgabe, ohne dass die Buttons gesperrt aussahen.
-- **Fehlende Rückmeldung beim Erledigen.** Es gab Feedback nur im Fehlerfall.
-- **Fehler beim Anlegen** erschienen nur im Dialog, nicht als HA-Benachrichtigung.
-- **Beschnittener Dialog.** Der Dialog lag in der `ha-card`, die `overflow:
-  hidden` trägt – ein `position: fixed`-Kind wird davon beschnitten, sobald ein
-  Vorfahre einen Containing-Block aufspannt.
-- **Kartengröße.** `getCardSize()` gab eine Konstante zurück, und
-  `getGridOptions()` für das Sections-Layout fehlte ganz.
-- **Fokusverlust.** Jedes Datenupdate baute das gesamte Shadow-DOM neu; wer
-  gerade einen Button fokussiert hatte, verlor den Fokus.
-- **Kein Fokus-Trap** trotz `aria-modal="true"` – Tab lief ins Dashboard
-  darunter. Escape hing am Backdrop und war nach einem Re-Render wirkungslos.
-- **`color-mix()` ohne Fallback.** Auf älteren Tablet-Browsern fiel damit nicht
-  der Effekt aus, sondern die ganze Deklaration.
-- **Hover-Zustände klebten** auf Touch-Geräten nach dem Antippen fest.
-- **Touch-Ziele** von 34 px bzw. 38 px, unter der 44-px-Empfehlung.
-- **Statusmeldung ohne Ende** – kein Timeout, kein Schließen-Knopf.
-- **`getStubConfig()`** gab eine fest verdrahtete Entity zurück.
-- **Unlesbare Fälligkeitsdaten** ergaben eine leere Zeile ohne Hinweis.
-- **Zustand über einen Konfigwechsel hinweg**: aufgeklappte Zeile und gebuchte
-  Aufgaben werden über die `task_id` geführt und passten nach einem Wechsel der
-  Datenquelle nicht mehr zum Inhalt.
-- **`new Event` mit angehängtem `detail`** statt `CustomEvent`.
+- **Double completion.** After booking a chore it sat in the list unchanged and
+  without any acknowledgement, because the Donetick coordinator only refreshes
+  the sensor a moment later. The second tap went through as a second booking.
+  Booked chores are now held as "Gebucht – warte auf Donetick …" until Donetick
+  confirms.
+- **Silently swallowed taps.** While one booking was in flight, the card
+  discarded taps on *every* other chore, and nothing about those buttons looked
+  disabled.
+- **No acknowledgement on completion.** Feedback only ever appeared on failure.
+- **Errors when adding a chore** showed up in the dialog only, never as a Home
+  Assistant notification.
+- **Clipped dialog.** It lived inside the `ha-card`, which carries
+  `overflow: hidden`. A `position: fixed` child gets clipped by that as soon as
+  any ancestor establishes a containing block.
+- **Card sizing.** `getCardSize()` returned a constant, and `getGridOptions()`
+  for the sections layout was missing entirely.
+- **Lost focus.** Every data update rebuilt the whole shadow DOM, so anyone who
+  had a button focused lost it.
+- **No focus trap** despite `aria-modal="true"` — Tab walked straight into the
+  dashboard underneath. Escape was bound to the backdrop and stopped working
+  after a re-render.
+- **`color-mix()` without a fallback.** On older tablet browsers that drops the
+  entire declaration, not just the effect.
+- **Hover states stuck** on touch devices after a tap.
+- **Touch targets** of 34 px and 38 px, below the 44 px guideline.
+- **Status message that never left** — no timeout, no dismiss button.
+- **`getStubConfig()`** returned a hard-coded entity id.
+- **Unreadable due dates** rendered as an empty line with no explanation.
+- **State surviving a config change.** The expanded row and booked chores are
+  tracked by `task_id`; after switching to a different data source those ids
+  refer to chores that don't exist there.
+- **`new Event` with `detail` attached afterwards** instead of `CustomEvent`.
 
-### Geändert
+### Changed
 
-- **Inkrementelles Rendering.** Das Grundgerüst entsteht einmal, danach werden
-  nur noch geänderte Stellen angefasst. Zeilen werden über die `task_id`
-  wiederverwendet.
-- **Kein String-Templating mehr.** Alle Texte gehen über `textContent`; die
-  Karte erzeugt kein HTML mehr aus Donetick-Daten. Ein vergessenes Escaping
-  kann es damit nicht mehr geben.
-- **Stylesheet einmal je Seite**, über `adoptedStyleSheets` von allen
-  Karteninstanzen geteilt, mit `<style>`-Rückfall für ältere Engines.
-- **Änderungserkennung ohne Signatur-String.** Referenzvergleich statt
-  JSON-Serialisierung über alle Entities.
-- **Wiederholungen**: zusätzlich monatlich und jährlich.
-- **Testsuite** mit jsdom, in der CI ausgeführt.
+- **Incremental rendering.** The shell is built once; after that only what
+  actually changed gets touched. Rows are reused by `task_id`.
+- **No more string templating.** All text goes through `textContent`, so the
+  card no longer turns Donetick data into markup. Forgetting to escape
+  something is no longer possible.
+- **Stylesheet parsed once per page** and shared across card instances via
+  `adoptedStyleSheets`, falling back to a `<style>` element on older engines.
+- **Change detection without a signature string.** Comparing references instead
+  of serialising every entity to JSON: 163 µs → 89 µs per state update across
+  roughly 1500 entities, and none of the intermediate objects.
+- **Recurrence**: monthly and yearly added.
+- **Test suite** using jsdom, 72 tests, run in CI.
 
 ## [1.0.0] – 2026-09-08
 
-Erste Version als eigenständiges Repository, übernommen aus der bis dahin
-inline in Home Assistant hinterlegten `data:`-Ressource.
+First release as a standalone repository, lifted out of the `data:` resource
+that had been registered inline in Home Assistant until then.

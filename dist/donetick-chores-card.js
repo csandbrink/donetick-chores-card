@@ -1,7 +1,7 @@
-// Auswahlliste und Validierung teilen sich diese Liste, damit sie nicht
-// auseinanderlaufen koennen. Der Service donetick.create_chore kennt weitere
-// Typen (adaptive, interval, days_of_the_week, ...), die aber jeweils zusaetzlich
-// frequency_metadata brauchen und ohne eigenes Eingabefeld nicht sinnvoll sind.
+// The picker and the validation share this list so the two cannot drift apart.
+// donetick.create_chore knows further types (adaptive, interval,
+// days_of_the_week, ...), but each of them also needs frequency_metadata and
+// makes no sense without a field to fill that in.
 const FREQUENCY_TYPES = [
   { value: "once", label: "Einmalig" },
   { value: "daily", label: "Täglich" },
@@ -11,8 +11,8 @@ const FREQUENCY_TYPES = [
 ];
 const FREQUENCY_VALUES = new Set(FREQUENCY_TYPES.map((entry) => entry.value));
 
-// Das Stylesheet wird einmal je Seite geparst und von allen Karteninstanzen
-// geteilt, statt bei jedem Render neu in den Shadow-Root geschrieben zu werden.
+// Parsed once per page and shared by every card instance, rather than written
+// into the shadow root again on every render.
 const STYLES = `
 :host { display: block; }
 ha-card { overflow: hidden; }
@@ -65,9 +65,9 @@ button:disabled { opacity: .55; cursor: wait; }
 .cancel { background: transparent; color: var(--primary-text-color); }
 .save { background: var(--primary-color); color: var(--text-primary-color); font-weight: 600; }
 .status { display: flex; align-items: center; gap: 8px; margin: 0 14px 10px; border-radius: 10px; padding: 9px 12px; border: 1px solid var(--success-color, #43a047); background: transparent; background: color-mix(in srgb, var(--success-color, #43a047) 12%, transparent); color: var(--primary-text-color); font-size: .84rem; }
-/* Auf Touch-Geraeten bleibt ein :hover-Zustand nach dem Antippen haengen, bis
-   woanders hingetippt wird - auf einem Wand-Tablet sieht das aus, als sei ein
-   Knopf dauerhaft aktiv. Deshalb nur fuer echte Zeigegeraete. */
+/* On a touchscreen a hover state sticks after a tap until you tap somewhere
+   else, which on a wall tablet makes a button look permanently pressed. So:
+   real pointing devices only. */
 @media (hover: hover) and (pointer: fine) {
   .add:hover { background: var(--divider-color); background: color-mix(in srgb, var(--primary-color) 12%, transparent); }
   .check:hover:not(:disabled) { background: var(--divider-color); background: color-mix(in srgb, var(--primary-color) 12%, transparent); }
@@ -94,14 +94,14 @@ function sharedStyleSheet() {
       return cachedStyleSheet;
     }
   } catch (error) {
-    // Aeltere Engines: faellt unten auf ein <style>-Element zurueck.
+    // Older engines fall through to a <style> element below.
   }
   cachedStyleSheet = null;
   return cachedStyleSheet;
 }
 
-// <label>Text<control></label> - die Beschriftung umschliesst das Feld, damit
-// kein for/id-Paar noetig ist, das im Shadow-Root ohnehin nur lokal gilt.
+// <label>Text<control></label> - wrapping the control avoids a for/id pair,
+// which inside a shadow root would only ever be locally scoped anyway.
 function labelled(caption, control) {
   const label = document.createElement("label");
   label.append(caption, control);
@@ -126,8 +126,8 @@ class DonetickChoresCard extends HTMLElement {
     this._statusTimer = null;
   }
 
-  // Ohne das feuert der Timer noch, nachdem die Karte aus dem Dashboard
-  // entfernt wurde (Ansicht gewechselt, Karte bearbeitet).
+  // Without this the timer still fires after the card has been removed from the
+  // dashboard - switching views, or editing the dashboard.
   disconnectedCallback() {
     this._clearStatusTimer();
   }
@@ -139,9 +139,8 @@ class DonetickChoresCard extends HTMLElement {
   }
 
   /**
-   * Setzt die Meldung ueber der Liste. Erfolgsmeldungen verschwinden von
-   * selbst; Fehlermeldungen bleiben stehen, bis der Nutzer sie wegklickt oder
-   * die naechste Aktion sie ersetzt.
+   * Sets the message above the list. Success messages clear themselves; errors
+   * stay until the user dismisses them or the next action replaces them.
    */
   _setStatus(message, { autoDismiss = true } = {}) {
     this._clearStatusTimer();
@@ -165,9 +164,9 @@ class DonetickChoresCard extends HTMLElement {
       ...config,
     };
 
-    // Zeigt die Karte auf eine andere Quelle, ist der bisherige Zustand
-    // wertlos und teils irrefuehrend: aufgeklappte Zeile, gebuchte Aufgaben und
-    // laufende Buchungen beziehen sich auf task_ids der alten Quelle.
+    // Once the card points at a different source the existing state is useless
+    // and partly misleading: the expanded row, the booked chores and any
+    // in-flight bookings all refer to task_ids from the old source.
     const sourceChanged =
       previous &&
       (previous.todo_entity !== this._config.todo_entity ||
@@ -189,14 +188,14 @@ class DonetickChoresCard extends HTMLElement {
     this._render();
   }
 
-  // Home Assistant tauscht bei jedem Update das states-Objekt aus, behaelt aber
-  // die State-Objekte unveraenderter Entities per Referenz bei. Ein
-  // Referenzvergleich der relevanten Entities reicht daher aus - ohne
-  // Zwischenarrays, ohne sort, ohne JSON.stringify.
+  // Home Assistant swaps the states object on every update but keeps the state
+  // objects of unchanged entities by reference. Comparing references for the
+  // entities we care about is therefore enough - no intermediate arrays, no
+  // sort, no JSON.stringify.
   _relevantChange(previous, next) {
     if (!this._config) return true;
-    // HA erzeugt das hass-Objekt auch dann neu, wenn sich kein State geaendert
-    // hat (Theme, Verbindungsstatus, Panel-Wechsel).
+    // HA also recreates the hass object when no state changed at all - theme,
+    // connection status, panel switch.
     if (previous.states === next.states) return false;
     const previousStates = previous.states || {};
     const nextStates = next.states || {};
@@ -217,26 +216,26 @@ class DonetickChoresCard extends HTMLElement {
     return previousCount !== nextCount;
   }
 
-  // Masonry-Layout: Hoeheneinheiten a ~50 px. Kopfzeile plus eine Zeile je
-  // Aufgabe kommt der tatsaechlichen Hoehe deutlich naeher als eine Konstante.
-  // Wie lange eine Erfolgsmeldung stehen bleibt, in Millisekunden.
+  // Masonry layout: height units of roughly 50 px. A header plus one row per
+  // chore is far closer to the real height than a constant.
+  // How long a success message stays up, in milliseconds.
   static statusTimeoutMs = 8000;
 
   getCardSize() {
     return 1 + this._tasks().length;
   }
 
-  // Sections-Layout (HA 2024.11+): dort steuert getGridOptions die Groesse,
-  // getCardSize wird gar nicht mehr ausgewertet. Ohne diese Methode bekommt die
-  // Karte die Default-Kachelgroesse, unabhaengig von der Anzahl der Aufgaben.
+  // Sections layout (HA 2024.11+): there getGridOptions drives the size and
+  // getCardSize is not consulted at all. Without this method the card gets the
+  // default tile size no matter how many chores it holds.
   getGridOptions() {
     return { rows: "auto", columns: "full", min_columns: 6 };
   }
 
-  // HA ruft getStubConfig(hass, entities, entitiesFallback) auf, wenn die Karte
-  // aus der Kartenauswahl heraus angelegt wird. Bisher wurde todo.all_tasks fest
-  // zurueckgegeben - das passt nur zufaellig und nur in einer Installation, in der
-  // die Entity genau so heisst.
+  // HA calls getStubConfig(hass, entities, entitiesFallback) when the card is
+  // created from the card picker. This used to return todo.all_tasks verbatim,
+  // which only happens to fit an installation where the entity is named exactly
+  // that.
   static getStubConfig(hass) {
     const states = hass?.states || {};
     const donetickTodo = Object.keys(states).find(
@@ -307,10 +306,10 @@ class DonetickChoresCard extends HTMLElement {
     return `Fällig ${new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit" }).format(due)}`;
   }
 
-  // HA hoert global auf "hass-notification" und zeigt die Nachricht als Toast.
-  // Ein einfaches Event hat kein detail-Feld - das nachtraeglich als Property
-  // anzuhaengen funktioniert in JS zwar, ist aber nicht die Event-Semantik und
-  // bricht, sobald jemand das Event klont oder weiterreicht.
+  // HA listens globally for "hass-notification" and shows the message as a
+  // toast. A plain Event has no detail field - attaching one as an ordinary
+  // property does work in JavaScript, but it isn't the event semantics and
+  // breaks the moment anyone clones or forwards the event.
   _notify(message) {
     this.dispatchEvent(
       new CustomEvent("hass-notification", {
@@ -383,8 +382,8 @@ class DonetickChoresCard extends HTMLElement {
         data.assignee_ids = [Number(selectedUser.user_id)];
         data.assigned_to = Number(selectedUser.user_id);
       }
-      // frequency ist der Wiederholungsabstand und nur bei wiederkehrenden
-      // Aufgaben sinnvoll; bei "once" hat Donetick dafuer keine Verwendung.
+      // frequency is the repeat interval and only means anything for recurring
+      // chores; for "once" Donetick has no use for it.
       if (resolvedFrequencyType !== "once") data.frequency = 1;
       if (parsedDue) data.next_due_date = parsedDue.toISOString();
       await this._hass.callService("donetick", "create_chore", data);
@@ -435,9 +434,9 @@ class DonetickChoresCard extends HTMLElement {
       }
       await this._hass.callService("donetick", "complete_chore", data);
       this._expandedTaskId = null;
-      // Der Coordinator aktualisiert den Sensor erst mit Verzoegerung. Bis dahin
-      // die Zeile lokal als erledigt fuehren, sonst sieht der Nutzer keine
-      // Reaktion und bucht die Aufgabe ein zweites Mal.
+      // The coordinator only refreshes the sensor a moment later. Until then,
+      // hold the row as done locally - otherwise nothing visibly happens and
+      // the user books the chore a second time.
       this._completedTasks.set(Number(taskId), { dueAtCompletion, at: Date.now() });
       this._setStatus(member
         ? `„${taskName}" – erledigt von ${member.display_name}.`
@@ -456,8 +455,8 @@ class DonetickChoresCard extends HTMLElement {
     const byId = new Map(tasks.map((task) => [Number(task.attributes.task_id), task]));
     for (const [taskId, entry] of this._completedTasks) {
       const task = byId.get(taskId);
-      // Sensor ist verschwunden (Einmalaufgabe) oder hat einen neuen Termin
-      // (Wiederholung) -> Donetick hat die Buchung verarbeitet.
+      // Sensor gone (one-off chore) or carrying a new due date (recurring) -
+      // either way Donetick has processed the booking.
       const settled =
         !task ||
         (task.attributes.next_due_date ?? null) !== entry.dueAtCompletion ||
@@ -478,11 +477,10 @@ class DonetickChoresCard extends HTMLElement {
   // ---------------------------------------------------------------------------
   // Rendering
   //
-  // Die Karte wird nicht mehr bei jedem Update komplett neu aufgebaut. Das
-  // Grundgeruest entsteht einmal (_ensureShell), danach werden nur die Stellen
-  // angefasst, die sich tatsaechlich geaendert haben. Texte gehen ueber
-  // textContent statt durch String-Templating: aus Donetick-Daten kann damit
-  // gar kein HTML mehr entstehen.
+  // The card is no longer rebuilt from scratch on every update. The shell is
+  // created once (_ensureShell); after that only the parts that actually
+  // changed get touched. Text goes through textContent rather than string
+  // templating, so Donetick data can no longer turn into markup.
   // ---------------------------------------------------------------------------
 
   _ensureShell() {
@@ -520,8 +518,8 @@ class DonetickChoresCard extends HTMLElement {
     status.hidden = true;
     const statusText = document.createElement("span");
     statusText.className = "status-text";
-    // Die Live-Region sitzt am Text, nicht am Container - sonst liest der
-    // Screenreader das "x" des Schliessen-Knopfes mit vor.
+    // The live region sits on the text, not the container - otherwise a screen
+    // reader also announces the "x" of the dismiss button.
     statusText.setAttribute("role", "status");
     const statusClose = document.createElement("button");
     statusClose.className = "status-close";
@@ -539,10 +537,10 @@ class DonetickChoresCard extends HTMLElement {
 
     card.append(header, status, list);
 
-    // Der Dialog liegt bewusst ausserhalb der ha-card. ha-card traegt
-    // overflow: hidden, und ein position:fixed-Kind wird davon beschnitten,
-    // sobald irgendein Vorfahre einen Containing-Block aufspannt (transform,
-    // filter, contain) - im HA-Layout jederzeit moeglich.
+    // The dialog deliberately sits outside the ha-card. ha-card carries
+    // overflow: hidden, and a position: fixed child gets clipped by that as
+    // soon as any ancestor establishes a containing block (transform, filter,
+    // contain) - which can happen anywhere in the HA layout.
     const dialogHost = document.createElement("div");
     dialogHost.className = "dialog-host";
 
@@ -552,8 +550,8 @@ class DonetickChoresCard extends HTMLElement {
     this._bindShellEvents();
   }
 
-  // Die Zeilen werden laufend erzeugt und verworfen. Einzelne Listener muessten
-  // dabei jedes Mal neu gesetzt werden - Delegation auf der Liste nicht.
+  // Rows are created and discarded continuously. Per-row listeners would have
+  // to be re-attached every time; delegation on the list does not.
   _bindShellEvents() {
     const { add, list } = this._shell;
 
@@ -580,7 +578,7 @@ class DonetickChoresCard extends HTMLElement {
   }
 
   _openDialog() {
-    // Fuer die Rueckgabe des Fokus beim Schliessen.
+    // So focus can go back where it came from when the dialog closes.
     this._focusBeforeDialog = this.shadowRoot.activeElement || this._shell.add;
     this._dialogOpen = true;
     this._selectedCreateUserId = null;
@@ -741,9 +739,9 @@ class DonetickChoresCard extends HTMLElement {
       if (!seen.has(taskId)) this._rows.delete(taskId);
     }
 
-    // Nur anfassen, wenn sich Bestand oder Reihenfolge geaendert haben. Ein
-    // Knoten aus dem DOM zu nehmen verliert den Fokus, auch wenn er direkt
-    // wieder eingehaengt wird.
+    // Only touch this when the set of rows or their order actually changed.
+    // Taking a node out of the DOM drops focus, even if it goes straight back
+    // in.
     const current = list.childNodes;
     let changed = current.length !== ordered.length;
     if (!changed) {
@@ -897,8 +895,8 @@ class DonetickChoresCard extends HTMLElement {
     };
   }
 
-  // aria-modal="true" behauptet, der Rest der Seite sei nicht erreichbar. Ohne
-  // Fokus-Trap stimmt das nicht: Tab laeuft weiter ins Dashboard darunter.
+  // aria-modal="true" claims the rest of the page is unreachable. Without a
+  // focus trap that isn't true: Tab walks on into the dashboard underneath.
   _trapFocus(event, section) {
     const focusable = [...section.querySelectorAll(
       "button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled])",
@@ -936,7 +934,7 @@ class DonetickChoresCard extends HTMLElement {
     for (const button of dialog.memberBox.querySelectorAll("button.create-member")) {
       const selected = Number(button.dataset.createUserId) === Number(this._selectedCreateUserId);
       button.classList.toggle("selected", selected);
-      // aria-pressed stand bisher erst nach dem ersten Klick im Markup.
+      // aria-pressed used to appear in the markup only after the first click.
       button.setAttribute("aria-pressed", String(selected));
     }
 
@@ -954,15 +952,15 @@ class DonetickChoresCard extends HTMLElement {
       if (!this._dialog) return;
       this._dialog = null;
       dialogHost.replaceChildren();
-      // Fokus dorthin zurueck, wo er vor dem Oeffnen war.
+      // Focus back to wherever it was before the dialog opened.
       const target = this._focusBeforeDialog || this._shell.add;
       this._focusBeforeDialog = null;
       target?.focus?.();
       return;
     }
 
-    // Der Dialog wird nur beim Oeffnen gebaut, nie waehrend er offen ist -
-    // sonst verliert der Nutzer bei jedem Update seine Eingaben.
+    // The dialog is built when it opens and never while it is open - otherwise
+    // every data update would wipe whatever the user has typed.
     if (!this._dialog) {
       this._dialog = this._createDialog();
       dialogHost.replaceChildren(this._dialog.backdrop);
@@ -979,8 +977,8 @@ class DonetickChoresCard extends HTMLElement {
 
     if (!this._hass) {
       count.textContent = "";
-      // Ohne hass laesst sich nichts anlegen - ein Knopf, der auf Klick nichts
-      // tut, ist schlechter als ein sichtbar gesperrter.
+      // Nothing can be created without hass, and a button that does nothing on
+      // click is worse than one that is visibly disabled.
       add.disabled = true;
       this._rows.clear();
       list.replaceChildren(this._placeholder("loading", "Lade Aufgaben …"));
@@ -1015,5 +1013,3 @@ if (!window.customCards.some((card) => card.type === "donetick-chores-card")) {
     preview: true,
   });
 }
-
-//

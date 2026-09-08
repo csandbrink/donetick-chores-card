@@ -1,31 +1,38 @@
 # Tests
 
-Die Karte wird mit [jsdom](https://github.com/jsdom/jsdom) in einer echten
-DOM-Umgebung geladen und über ihre öffentliche Schnittstelle angesprochen –
-also so, wie Home Assistant es tut: `setConfig(...)`, dann `hass = ...`.
-Es wird nichts nachgebaut und nichts gemockt, was die Karte selbst tut.
+The card is loaded into a real DOM through [jsdom](https://github.com/jsdom/jsdom)
+and driven through its public interface, the same way Home Assistant drives it:
+`setConfig(...)`, then `hass = ...`. Nothing the card does is reimplemented or
+mocked.
 
-Benötigt **Node 22.22.2 oder neuer** – jsdom 30 setzt das voraus.
+Requires **Node 22.22.2 or newer** — that's what jsdom 30 needs.
 
 ```bash
 npm install
 npm test
 ```
 
-## Aufbau
+## Layout
 
-| Datei | Inhalt |
+| File | Covers |
 | --- | --- |
-| `helpers.mjs` | Lädt die Karte in eine frische jsdom-Umgebung, baut hass-Objekte |
-| `rendering.test.mjs` | Darstellung, Stylesheet-Handhabung, DOM-Stabilität |
-| `interaction.test.mjs` | Erledigen, Dialog, Fehlerfälle |
-| `logic.test.mjs` | Datums- und Initialenlogik, Änderungserkennung, Buchungs-Nachlauf |
+| `helpers.mjs` | Loads the card into a fresh jsdom environment, builds hass objects |
+| `rendering.test.mjs` | Rendering, stylesheet handling, DOM stability, stylesheet rules |
+| `interaction.test.mjs` | Completing chores, the dialog, error paths, status messages |
+| `logic.test.mjs` | Date and initial handling, change detection, post-booking follow-up |
 
-## Warum `withStates`
+## Why `withStates`
 
-Home Assistant tauscht bei jedem Update das `states`-Objekt aus, behält aber
-die State-Objekte unveränderter Entities per Referenz bei. Genau darauf stützt
-sich die Änderungserkennung der Karte. `withStates(hass, {...})` bildet dieses
-Verhalten nach: nur die angefassten Entities bekommen eine neue Referenz.
-Wer stattdessen das ganze hass-Objekt tief kopiert, testet etwas anderes als
-das, was im Browser passiert.
+Home Assistant swaps the `states` object on every update but keeps the state
+objects of unchanged entities by reference. The card's change detection relies
+on exactly that. `withStates(hass, {...})` reproduces it: only the entities you
+touch get a new reference.
+
+Deep-copying the whole hass object instead would test something the browser
+never does.
+
+## Why `plain`
+
+Objects created inside the jsdom realm carry jsdom's prototypes.
+`assert.deepStrictEqual` compares prototypes too and fails even when the
+contents match, so `plain(value)` takes a JSON round trip first.
