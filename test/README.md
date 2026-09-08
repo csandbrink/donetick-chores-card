@@ -5,6 +5,8 @@ DOM-Umgebung geladen und über ihre öffentliche Schnittstelle angesprochen –
 also so, wie Home Assistant es tut: `setConfig(...)`, dann `hass = ...`.
 Es wird nichts nachgebaut und nichts gemockt, was die Karte selbst tut.
 
+Benötigt **Node 22.22.2 oder neuer** – jsdom 30 setzt das voraus.
+
 ```bash
 npm install
 npm test
