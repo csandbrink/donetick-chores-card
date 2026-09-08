@@ -3,6 +3,23 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.1.3] – 2026-09-08
+
+### Fixed
+
+- **The circle in front of a chore changed size depending on whether anyone was
+  assigned.** The badge showing an assignee's initial was sized to the icon box
+  rather than to the circle the icon actually draws — MDI's outline circles have
+  radius 10 in a 24-unit viewBox, so the drawn circle is 20/24 of the box — and
+  its border was added on top of that width. Measured in a browser: 32 px with
+  an assignee against 22.5 px without. Both are 22.5 px now, and the badge size
+  derives from the icon size so the two cannot drift apart again.
+
+### Changed
+
+- **A chore without a due date now shows nothing** instead of "Ohne Termin".
+  The empty line is hidden rather than left blank, so it takes no space.
+
 ## [1.1.2] – 2026-09-08
 
 ### Changed

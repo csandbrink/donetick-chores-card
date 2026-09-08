@@ -27,9 +27,14 @@ ha-card { overflow: hidden; }
 .task.expanded { background: var(--secondary-background-color); background: color-mix(in srgb, var(--primary-color) 6%, transparent); border-radius: 12px; }
 .task-main { min-height: 48px; display: flex; align-items: center; }
 button { font: inherit; }
-.check { width: 44px; height: 44px; flex: 0 0 44px; border: 0; border-radius: 50%; background: transparent; color: var(--primary-color); cursor: pointer; display: grid; place-items: center; }
-.check ha-icon { --mdc-icon-size: 27px; }
-.assignee-initial { width: 28px; height: 28px; display: grid; place-items: center; border: 2px solid currentColor; border-radius: 50%; font-size: .72rem; line-height: 1; font-weight: 700; }
+.check { --icon-box: 27px; width: 44px; height: 44px; flex: 0 0 44px; border: 0; border-radius: 50%; background: transparent; color: var(--primary-color); cursor: pointer; display: grid; place-items: center; }
+.check ha-icon { --mdc-icon-size: var(--icon-box); }
+/* The badge has to match the circle the icon actually draws, not the icon box.
+   MDI's outline circles have radius 10 in a 24-unit viewBox, so the drawn circle
+   is 20/24 of the box - 22.5px at an icon box of 27px. Sizing the badge to the
+   box instead made assigned chores show a visibly larger circle than
+   unassigned ones. Deriving it keeps the two tied together. */
+.assignee-initial { box-sizing: border-box; width: calc(var(--icon-box) * 20 / 24); height: calc(var(--icon-box) * 20 / 24); display: grid; place-items: center; border: 2px solid currentColor; border-radius: 50%; font-size: .68rem; line-height: 1; font-weight: 700; }
 .text { min-width: 0; padding: 3px 8px 3px 2px; }
 .name { color: var(--primary-text-color); font-size: .98rem; line-height: 1.3; overflow-wrap: anywhere; }
 .due { color: var(--secondary-text-color); font-size: .78rem; margin-top: 2px; }
@@ -305,7 +310,7 @@ class DonetickChoresCard extends HTMLElement {
   }
 
   _dueText(value) {
-    if (!value) return "Ohne Termin";
+    if (!value) return "";
     const due = new Date(value);
     if (Number.isNaN(due.getTime())) return "Termin ungültig";
     const now = new Date();
@@ -683,6 +688,8 @@ class DonetickChoresCard extends HTMLElement {
 
     row.name.textContent = task.state;
     row.due.textContent = done ? "Gebucht – warte auf Donetick …" : this._dueText(due);
+    // A chore without a due date says nothing rather than "no due date".
+    row.due.hidden = !row.due.textContent;
     row.due.classList.toggle("overdue", !done && this._isOverdue(due));
 
     row.check.dataset.taskId = String(taskId);

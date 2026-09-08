@@ -14,9 +14,11 @@ const inDays = (days) => {
 const card = () => makeCard(loadCard());
 
 describe("_dueText", () => {
-  test("no due date", () => {
-    assert.equal(card()._dueText(null), "Ohne Termin");
-    assert.equal(card()._dueText(""), "Ohne Termin");
+  test("no due date says nothing at all", () => {
+    // Chores without a due date used to read "Ohne Termin", which is noise on
+    // a wall dashboard - the absence of a date already says it.
+    assert.equal(card()._dueText(null), "");
+    assert.equal(card()._dueText(""), "");
   });
 
   test("an unreadable due date is named rather than hidden", () => {

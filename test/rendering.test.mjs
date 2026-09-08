@@ -11,7 +11,6 @@ describe("Rendering", () => {
     const list = rows(card);
     assert.equal(list.length, 1);
     assert.equal(text(list[0].querySelector(".name")), "Müll rausbringen");
-    assert.equal(text(list[0].querySelector(".due")), "Ohne Termin");
   });
 
   test("a chore name is set as text, not as markup", () => {
@@ -259,10 +258,10 @@ describe("Stylesheet rules", () => {
     const text = css();
     const check = ruleFor(text, ".check");
     const chooser = ruleFor(text, ".chooser");
-    const iconRule = text.split("\n").find((line) => line.trimStart().startsWith(".check ha-icon {"));
-
     const buttonWidth = Number(/width:\s*(\d+)px/.exec(check)[1]);
-    const iconSize = Number(/--mdc-icon-size:\s*(\d+)px/.exec(iconRule)[1]);
+    // --icon-box is the single place the icon size is written down; the badge
+    // and the icon element both derive from it.
+    const iconSize = Number(/--icon-box:\s*(\d+)px/.exec(check)[1]);
     // The button is wider than the circle drawn inside it, and that circle is
     // centred - so the circle starts half the difference in.
     const circleStartsAt = (buttonWidth - iconSize) / 2;
@@ -413,5 +412,66 @@ describe("Hiding elements", () => {
     card.shadowRoot.querySelector("button.member").click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(card.shadowRoot.querySelector(".status").hidden, false);
+  });
+});
+
+describe("The circle in front of a chore", () => {
+  const css = () => {
+    const env = loadCard({ adoptedStyleSheets: false });
+    const card = makeCard(env);
+    return card.shadowRoot.querySelector("style").textContent.replace(/\/\*[\s\S]*?\*\//g, "");
+  };
+  const ruleFor = (text, selector) =>
+    text.split("\n").find((line) => line.trimStart().startsWith(`${selector} {`));
+
+  // The rendered diameters are verified in a browser, not here — jsdom does no
+  // layout and cannot resolve calc() against a custom property. What is checked
+  // here are the two properties whose absence caused assigned chores to show a
+  // visibly larger circle than unassigned ones.
+  test("the assignee badge is measured from its border, not inside it", () => {
+    const rule = ruleFor(css(), ".assignee-initial");
+    assert.ok(rule, "there is a rule for the badge");
+    assert.match(
+      rule,
+      /box-sizing:\s*border-box/,
+      "without border-box the 2px border is added on top and the badge outgrows the icon",
+    );
+  });
+
+  test("the badge size derives from the icon size instead of repeating it", () => {
+    const text = css();
+    assert.match(ruleFor(text, ".check"), /--icon-box:\s*\d+px/, "the icon box is a named value");
+    const badge = ruleFor(text, ".assignee-initial");
+    assert.match(badge, /width:\s*calc\(var\(--icon-box\)/, "badge width follows the icon box");
+    assert.doesNotMatch(
+      badge,
+      /width:\s*\d+px/,
+      "a hard-coded width would drift apart from the icon again",
+    );
+  });
+});
+
+describe("Chores without a due date", () => {
+  test("show no due line at all", () => {
+    const env = loadCard();
+    const card = makeCard(env);
+    card.hass = makeHass({ tasks: [{ id: 1, name: "Irgendwann", due: null }] });
+
+    const due = card.shadowRoot.querySelector(".due");
+    assert.equal(due.textContent, "");
+    assert.equal(due.hidden, true, "an empty line would still take up space");
+  });
+
+  test("a chore that gains a due date shows it again", () => {
+    const env = loadCard();
+    const card = makeCard(env);
+    const hass = makeHass({ tasks: [{ id: 1, due: null }] });
+    card.hass = hass;
+    assert.equal(card.shadowRoot.querySelector(".due").hidden, true);
+
+    const due = new Date(Date.now() + 86400000).toISOString();
+    card.hass = withStates(hass, { "sensor.donetick_chores_1": { attributes: { next_due_date: due } } });
+    assert.equal(card.shadowRoot.querySelector(".due").hidden, false);
+    assert.equal(text(card.shadowRoot.querySelector(".due")), "Morgen fällig");
   });
 });
