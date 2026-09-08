@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { loadCard, makeCard, makeHass, withStates, rows, text, MEMBERS } from "./helpers.mjs";
 
 describe("Rendering", () => {
-  test("zeigt Aufgaben mit Name und Fälligkeit", () => {
+  test("shows chores with name and due date", () => {
     const env = loadCard();
     const card = makeCard(env);
     card.hass = makeHass({ tasks: [{ id: 1, name: "Müll rausbringen" }] });
@@ -14,7 +14,7 @@ describe("Rendering", () => {
     assert.equal(text(list[0].querySelector(".due")), "Ohne Termin");
   });
 
-  test("Aufgabenname wird als Text gesetzt, nicht als Markup", () => {
+  test("a chore name is set as text, not as markup", () => {
     const env = loadCard();
     const card = makeCard(env);
     card.hass = makeHass({ tasks: [{ id: 1, name: '<img src=x onerror="alert(1)">' }] });
@@ -24,7 +24,7 @@ describe("Rendering", () => {
     assert.equal(name.textContent, '<img src=x onerror="alert(1)">');
   });
 
-  test("Mitgliedsname wird als Text gesetzt, nicht als Markup", () => {
+  test("a member name is set as text, not as markup", () => {
     const env = loadCard();
     const card = makeCard(env);
     card.hass = makeHass({
@@ -38,27 +38,27 @@ describe("Rendering", () => {
     assert.equal(member.title, "<b>Chef</b>");
   });
 
-  test("leerer Zustand", () => {
+  test("empty state", () => {
     const env = loadCard();
     const card = makeCard(env);
     card.hass = makeHass({ tasks: [] });
     assert.equal(text(card.shadowRoot.querySelector(".empty")), "Keine offenen Aufgaben");
   });
 
-  test("Ladezustand ohne hass", () => {
+  test("loading state before hass arrives", () => {
     const env = loadCard();
     const card = makeCard(env);
     assert.equal(text(card.shadowRoot.querySelector(".loading")), "Lade Aufgaben …");
   });
 
-  test("Zähler nennt die Zahl offener Aufgaben", () => {
+  test("the counter names the number of open chores", () => {
     const env = loadCard();
     const card = makeCard(env);
     card.hass = makeHass({ tasks: [{ id: 1 }, { id: 2 }, { id: 3 }] });
     assert.equal(text(card.shadowRoot.querySelector(".count")), "3 offen");
   });
 
-  test("Titel kommt aus der Config, Standard ist 'Aufgaben'", () => {
+  test("the title comes from the config, defaulting to 'Aufgaben'", () => {
     const env = loadCard();
     const a = makeCard(env);
     assert.equal(text(a.shadowRoot.querySelector(".title")), "Aufgaben");
@@ -67,7 +67,7 @@ describe("Rendering", () => {
     assert.equal(text(b.shadowRoot.querySelector(".title")), "Haushalt");
   });
 
-  test("überfällige Aufgabe wird markiert, künftige nicht", () => {
+  test("an overdue chore is marked, a future one is not", () => {
     const env = loadCard();
     const card = makeCard(env);
     const past = new Date(Date.now() - 3 * 86400000).toISOString();
@@ -79,7 +79,7 @@ describe("Rendering", () => {
     assert.ok(!list[1].querySelector(".due").classList.contains("overdue"));
   });
 
-  test("sortiert nach Fälligkeit, Aufgaben ohne Termin zuletzt", () => {
+  test("sorted by due date, chores without one last", () => {
     const env = loadCard();
     const card = makeCard(env);
     const soon = new Date(Date.now() + 86400000).toISOString();
@@ -97,14 +97,14 @@ describe("Rendering", () => {
     );
   });
 
-  test("zeigt die Initiale der zugewiesenen Person", () => {
+  test("shows the initial of the assigned member", () => {
     const env = loadCard();
     const card = makeCard(env);
     card.hass = makeHass({ tasks: [{ id: 1, assignedTo: 2 }] });
     assert.equal(text(card.shadowRoot.querySelector(".assignee-initial")), "I");
   });
 
-  test("inaktive Aufgaben und Sensoren ohne task_id werden ausgeblendet", () => {
+  test("inactive chores and sensors without a task_id are hidden", () => {
     const env = loadCard();
     const card = makeCard(env);
     const hass = makeHass({ tasks: [{ id: 1, name: "aktiv" }, { id: 2, name: "inaktiv", isActive: false }] });
@@ -117,7 +117,7 @@ describe("Rendering", () => {
     assert.deepEqual(rows(card).map((row) => text(row.querySelector(".name"))), ["aktiv"]);
   });
 
-  test("fremde Entities werden nicht als Aufgaben gelesen", () => {
+  test("unrelated entities are not read as chores", () => {
     const env = loadCard();
     const card = makeCard(env);
     card.hass = makeHass({
@@ -131,7 +131,7 @@ describe("Rendering", () => {
 });
 
 describe("Stylesheet", () => {
-  test("Fallback-Pfad hängt genau ein <style> ein, auch nach vielen Renders", () => {
+  test("the fallback path adds exactly one <style>, even after many renders", () => {
     const env = loadCard({ adoptedStyleSheets: false });
     const card = makeCard(env);
     for (let i = 0; i < 5; i += 1) {
@@ -140,7 +140,7 @@ describe("Stylesheet", () => {
     assert.equal(card.shadowRoot.querySelectorAll("style").length, 1);
   });
 
-  test("moderner Pfad nutzt adoptedStyleSheets und kein <style>", () => {
+  test("the modern path uses adoptedStyleSheets and no <style>", () => {
     const env = loadCard({ adoptedStyleSheets: true });
     const card = makeCard(env);
     card.hass = makeHass({ tasks: [{ id: 1 }] });
@@ -148,7 +148,7 @@ describe("Stylesheet", () => {
     assert.equal(card.shadowRoot.adoptedStyleSheets.length, 1);
   });
 
-  test("mehrere Karten teilen sich dasselbe Stylesheet-Objekt", () => {
+  test("several cards share one stylesheet object", () => {
     const env = loadCard({ adoptedStyleSheets: true });
     const a = makeCard(env);
     const b = makeCard(env);
@@ -158,20 +158,20 @@ describe("Stylesheet", () => {
   });
 });
 
-describe("DOM-Stabilität", () => {
-  test("unveränderte Daten lassen die Zeilen-Knoten unangetastet", () => {
+describe("DOM stability", () => {
+  test("unchanged data leaves the row nodes alone", () => {
     const env = loadCard();
     const card = makeCard(env);
     const hass = makeHass({ tasks: [{ id: 1 }, { id: 2 }] });
     card.hass = hass;
     const before = rows(card);
 
-    // gleiche Referenzen -> _relevantChange muss abwinken
+    // Same references, so _relevantChange has to wave this through.
     card.hass = { ...hass, states: { ...hass.states } };
     assert.deepEqual(rows(card), before);
   });
 
-  test("Textänderung an einer Aufgabe erhält den Zeilen-Knoten", () => {
+  test("a text change keeps the row node", () => {
     const env = loadCard();
     const card = makeCard(env);
     const hass = makeHass({ tasks: [{ id: 1, name: "alt" }] });
@@ -180,11 +180,11 @@ describe("DOM-Stabilität", () => {
 
     card.hass = withStates(hass, { "sensor.donetick_chores_1": { state: "neu" } });
     const after = rows(card)[0];
-    assert.equal(after, before, "derselbe Knoten wurde weiterverwendet");
+    assert.equal(after, before, "the same node was reused");
     assert.equal(text(after.querySelector(".name")), "neu");
   });
 
-  test("Fokus überlebt ein Datenupdate", () => {
+  test("focus survives a data update", () => {
     const env = loadCard();
     const card = makeCard(env);
     const hass = makeHass({ tasks: [{ id: 1, name: "alt" }] });
@@ -195,10 +195,10 @@ describe("DOM-Stabilität", () => {
     assert.equal(card.shadowRoot.activeElement, check);
 
     card.hass = withStates(hass, { "sensor.donetick_chores_1": { state: "neu" } });
-    assert.equal(card.shadowRoot.activeElement, check, "Fokus blieb auf dem Button");
+    assert.equal(card.shadowRoot.activeElement, check, "focus stayed on the button");
   });
 
-  test("entfernte Aufgabe verschwindet, verbleibende behalten ihren Knoten", () => {
+  test("a removed chore disappears, the rest keep their nodes", () => {
     const env = loadCard();
     const card = makeCard(env);
     const hass = makeHass({ tasks: [{ id: 1, name: "eins" }, { id: 2, name: "zwei" }] });
@@ -212,9 +212,9 @@ describe("DOM-Stabilität", () => {
   });
 });
 
-describe("Stylesheet-Regeln", () => {
-  // Kommentare fliegen raus: sie enthalten Begriffe wie ":hover", die die
-  // Prüfungen unten sonst falsch anschlagen lassen.
+describe("Stylesheet rules", () => {
+  // Strip comments first: they contain terms like ":hover" that would
+  // otherwise trip the checks below.
   const css = () => {
     const env = loadCard({ adoptedStyleSheets: false });
     const card = makeCard(env);
@@ -224,32 +224,52 @@ describe("Stylesheet-Regeln", () => {
   const ruleFor = (text, selector) =>
     text.split("\n").find((line) => line.trimStart().startsWith(`${selector} {`));
 
-  test("Touch-Ziele sind mindestens 44 px hoch", () => {
+  // The drawn circle and the tap target are deliberately different sizes: the
+  // circles stay small because a row of five reads better that way, and the
+  // tap target is widened with a transparent ::after. So measure what a finger
+  // actually hits — height plus borders plus the pseudo-element's overhang.
+  const hitArea = (text, selector) => {
+    const rule = ruleFor(text, selector);
+    assert.ok(rule, `rule for ${selector} found`);
+    const height = /height:\s*(\d+)px/.exec(rule);
+    assert.ok(height, `${selector} has a fixed height`);
+    const border = /border:\s*(\d+)px/.exec(rule);
+    const after = text.split("\n").filter((line) => line.includes(`${selector}::after`)).pop();
+    const inset = after ? /inset:\s*(-?\d+)px/.exec(after) : null;
+    return Number(height[1]) + 2 * Number(border?.[1] ?? 0) + 2 * Math.abs(Number(inset?.[1] ?? 0));
+  };
+
+  test("every control offers a tap target of at least 44 px", () => {
     const text = css();
     for (const selector of [".add", ".check", ".member", ".create-member"]) {
-      const rule = ruleFor(text, selector);
-      assert.ok(rule, `Regel für ${selector} gefunden`);
-      const height = /height:\s*(\d+)px/.exec(rule);
-      assert.ok(height, `${selector} hat eine feste Höhe`);
-      assert.ok(Number(height[1]) >= 44, `${selector} ist ${height[1]}px, erwartet >= 44px`);
+      const size = hitArea(text, selector);
+      assert.ok(size >= 44, `${selector} offers ${size}px, expected >= 44px`);
     }
   });
 
-  test("Hover-Regeln stehen ausschließlich im hover-Media-Query", () => {
+  test("the member circles stay visually small", () => {
+    const text = css();
+    // Regression guard for a deliberate design choice: growing these to fill
+    // the tap target made the row of five look clumsy.
+    assert.match(ruleFor(text, ".member"), /width:\s*34px/);
+    assert.match(ruleFor(text, ".create-member"), /height:\s*38px/);
+  });
+
+  test("hover rules live only inside the hover media query", () => {
     const text = css();
     const marker = text.indexOf("@media (hover: hover)");
-    assert.ok(marker > -1, "hover-Media-Query vorhanden");
+    assert.ok(marker > -1, "hover media query present");
     assert.equal(
       /:hover/.test(text.slice(0, marker)),
       false,
-      "kein :hover außerhalb – sonst klebt der Zustand auf Touch-Geräten",
+      "no :hover outside - it would stick on touch devices",
     );
     assert.ok(/:hover/.test(text.slice(marker)));
   });
 
-  test("jede color-mix-Deklaration hat einen einfachen Fallback davor", () => {
+  test("every color-mix declaration has a plain fallback ahead of it", () => {
     const lines = css().split("\n").filter((line) => line.includes("color-mix") && line.includes("{"));
-    assert.ok(lines.length > 0, "es gibt color-mix-Regeln zu prüfen");
+    assert.ok(lines.length > 0, "there are color-mix rules to check");
 
     for (const line of lines) {
       const body = line.slice(line.indexOf("{") + 1, line.lastIndexOf("}"));
@@ -270,8 +290,8 @@ describe("Stylesheet-Regeln", () => {
   });
 });
 
-describe("Konfigurationswechsel", () => {
-  test("Wechsel der Datenquelle verwirft den alten Zustand", async () => {
+describe("Configuration changes", () => {
+  test("switching data source discards the old state", async () => {
     const env = loadCard();
     const card = makeCard(env);
     const hass = makeHass({ tasks: [{ id: 7 }] });
@@ -283,12 +303,12 @@ describe("Konfigurationswechsel", () => {
     assert.equal(card._completedTasks.size, 1);
 
     card.setConfig({ todo_entity: "todo.andere_liste" });
-    assert.equal(card._completedTasks.size, 0, "gebuchte task_ids der alten Quelle");
+    assert.equal(card._completedTasks.size, 0, "booked task_ids from the old source");
     assert.equal(card._expandedTaskId, null);
     assert.equal(card._busyTaskIds.size, 0);
   });
 
-  test("gleiche Quelle, nur neuer Titel: Zustand bleibt", () => {
+  test("same source, new title only: state is kept", () => {
     const env = loadCard();
     const card = makeCard(env);
     card.hass = makeHass({ tasks: [{ id: 7 }] });
@@ -296,11 +316,11 @@ describe("Konfigurationswechsel", () => {
     assert.equal(card._expandedTaskId, 7);
 
     card.setConfig({ todo_entity: "todo.all_tasks", title: "Neuer Titel" });
-    assert.equal(card._expandedTaskId, 7, "kein Grund, die Auswahl zu verwerfen");
+    assert.equal(card._expandedTaskId, 7, "no reason to throw the selection away");
     assert.equal(text(card.shadowRoot.querySelector(".title")), "Neuer Titel");
   });
 
-  test("Plus-Button ist gesperrt, solange keine Daten da sind", () => {
+  test("the add button is disabled until data arrives", () => {
     const env = loadCard();
     const card = makeCard(env);
     assert.equal(card.shadowRoot.querySelector("button.add").disabled, true);
@@ -309,10 +329,57 @@ describe("Konfigurationswechsel", () => {
     assert.equal(card.shadowRoot.querySelector("button.add").disabled, false);
   });
 
-  test("setConfig ohne todo_entity wirft", () => {
+  test("setConfig without todo_entity throws", () => {
     const env = loadCard();
     const card = env.document.createElement("donetick-chores-card");
     assert.throws(() => card.setConfig({}), /todo_entity/);
     assert.throws(() => card.setConfig(null), /todo_entity/);
+  });
+});
+
+describe("Hiding elements", () => {
+  // Regression guard. .status was switched to display: flex to line up its text
+  // and dismiss button, which silently beat the hidden attribute: an empty
+  // green box then sat above the list permanently. Any class the card hides
+  // needs its own [hidden] override, so check them all rather than that one.
+  //
+  // This checks the rule rather than the rendered result on purpose: jsdom does
+  // not cascade shadow-root styles, so getComputedStyle would report "none"
+  // here whether or not the override exists, and would have passed while the
+  // bug was live.
+  const HIDDEN_CLASSES = ["status", "chooser", "form-error"];
+
+  const stylesheet = () => {
+    const env = loadCard({ adoptedStyleSheets: false });
+    const card = makeCard(env);
+    return card.shadowRoot.querySelector("style").textContent.replace(/\/\*[\s\S]*?\*\//g, "");
+  };
+
+  test("every hidden class that sets display also overrides it", () => {
+    const css = stylesheet();
+    let checked = 0;
+    for (const name of HIDDEN_CLASSES) {
+      const base = css.split("\n").find((line) => line.trimStart().startsWith(`.${name} {`));
+      assert.ok(base, `.${name} has a rule`);
+      if (!/(^|;|{)\s*display:/.test(base)) continue;
+      checked += 1;
+      assert.ok(
+        css.includes(`.${name}[hidden] { display: none; }`),
+        `.${name} sets display but has no [hidden] override`,
+      );
+    }
+    assert.ok(checked >= 2, "at least the two flex containers were actually examined");
+  });
+
+  test("the status bar carries the hidden attribute until there is something to say", async () => {
+    const env = loadCard();
+    const card = makeCard(env);
+    card.hass = makeHass({ tasks: [{ id: 1 }] });
+    assert.equal(card.shadowRoot.querySelector(".status").hidden, true);
+
+    card.shadowRoot.querySelector("button.check").click();
+    card.shadowRoot.querySelector("button.member").click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(card.shadowRoot.querySelector(".status").hidden, false);
   });
 });

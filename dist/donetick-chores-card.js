@@ -39,7 +39,7 @@ button { font: inherit; }
 .task.done .check { color: var(--success-color, #43a047); cursor: default; }
 .chooser { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; padding: 4px 8px 8px 50px; }
 .chooser-label { color: var(--secondary-text-color); font-size: .78rem; margin-right: 2px; }
-.member { width: 44px; height: 44px; flex: 0 0 44px; border: 1px solid var(--primary-color); border: 1px solid color-mix(in srgb, var(--primary-color) 50%, var(--divider-color)); border-radius: 50%; background: var(--card-background-color); background: color-mix(in srgb, var(--primary-color) 12%, var(--card-background-color)); color: var(--primary-color); font-weight: 700; cursor: pointer; box-shadow: none; }
+.member { position: relative; width: 34px; height: 34px; flex: 0 0 34px; border: 1px solid var(--primary-color); border: 1px solid color-mix(in srgb, var(--primary-color) 50%, var(--divider-color)); border-radius: 50%; background: var(--card-background-color); background: color-mix(in srgb, var(--primary-color) 12%, var(--card-background-color)); color: var(--primary-color); font-weight: 700; cursor: pointer; box-shadow: none; }
 button:disabled { opacity: .55; cursor: wait; }
 .empty, .loading { padding: 20px; color: var(--secondary-text-color); }
 .spinner { width: 19px; height: 19px; border: 2px solid var(--divider-color); border-top-color: var(--primary-color); border-radius: 50%; animation: spin .8s linear infinite; }
@@ -55,7 +55,13 @@ button:disabled { opacity: .55; cursor: wait; }
 .create-form fieldset { margin: 0; padding: 0; border: 0; }
 .create-form legend { margin-bottom: 8px; color: var(--secondary-text-color); font-size: .85rem; }
 .create-members { display: flex; flex-wrap: wrap; gap: 9px; }
-.create-member { min-width: 44px; height: 44px; padding: 0 12px; border: 1px solid var(--primary-color); border: 1px solid color-mix(in srgb, var(--primary-color) 50%, var(--divider-color)); border-radius: 22px; background: var(--card-background-color); background: color-mix(in srgb, var(--primary-color) 10%, var(--card-background-color)); color: var(--primary-color); font-weight: 700; cursor: pointer; }
+.create-member { position: relative; min-width: 38px; height: 38px; padding: 0 10px; border: 1px solid var(--primary-color); border: 1px solid color-mix(in srgb, var(--primary-color) 50%, var(--divider-color)); border-radius: 19px; background: var(--card-background-color); background: color-mix(in srgb, var(--primary-color) 10%, var(--card-background-color)); color: var(--primary-color); font-weight: 700; cursor: pointer; }
+/* The visible circles stay small on purpose - they read better in a row of
+   five. The tap target is widened with a transparent pseudo-element instead,
+   which reaches 44 px without growing the drawn circle. Padding could not do
+   this: it sits inside the border, so it would enlarge the circle itself. */
+.member::after, .create-member::after { content: ""; position: absolute; inset: -4px; border-radius: inherit; }
+.create-member::after { inset: -3px; }
 .create-member.selected { background: var(--primary-color); color: var(--text-primary-color); }
 .status-text { flex: 1; }
 .status-close { flex: 0 0 auto; box-sizing: content-box; width: 28px; height: 28px; padding: 8px; margin: -8px -4px -8px 0; border: 0; border-radius: 50%; background: transparent; color: var(--primary-text-color); font-size: 1.2rem; line-height: 1; cursor: pointer; }
@@ -80,7 +86,11 @@ button:disabled { opacity: .55; cursor: wait; }
   .chooser { padding-left: 46px; }
   .chooser-label { display: none; }
 }
+/* An element carrying the hidden attribute only gets display: none from the
+   browser stylesheet, which any display declaration here would beat. Every
+   class the card hides needs its own override. */
 .chooser[hidden] { display: none; }
+.status[hidden] { display: none; }
 `;
 
 let cachedStyleSheet;

@@ -90,7 +90,9 @@ sensor_prefix: sensor.donetick_chores_
 
 The card is built to run all day on a wall-mounted tablet:
 
-- Every control is at least 44 × 44 px.
+- Every control offers a tap target of at least 44 × 44 px. The member circles
+  stay visually smaller than that on purpose — a row of five reads better that
+  way — and reach the full size through a transparent pseudo-element instead.
 - Hover states apply only to real pointing devices (`@media (hover: hover)`).
   On a touchscreen a hover state sticks after a tap until you tap somewhere
   else, which makes a button look jammed.
