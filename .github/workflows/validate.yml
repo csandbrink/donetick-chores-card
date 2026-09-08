@@ -17,7 +17,11 @@ jobs:
         uses: hacs/action@main
         with:
           category: plugin
-          ignore: brands
+          # brands: nur fuer den offiziellen HACS-Index relevant.
+          # images: verlangt einen Screenshot in der README - ebenfalls eine
+          #   Anforderung des HACS-Index, nicht des Custom-Repository-Betriebs.
+          #   Beide entfernen, falls die Karte je in den HACS-Index soll.
+          ignore: brands images
 
   syntax:
     name: JS syntax
