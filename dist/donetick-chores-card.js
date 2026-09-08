@@ -1,3 +1,16 @@
+// Auswahlliste und Validierung teilen sich diese Liste, damit sie nicht
+// auseinanderlaufen koennen. Der Service donetick.create_chore kennt weitere
+// Typen (adaptive, interval, days_of_the_week, ...), die aber jeweils zusaetzlich
+// frequency_metadata brauchen und ohne eigenes Eingabefeld nicht sinnvoll sind.
+const FREQUENCY_TYPES = [
+  { value: "once", label: "Einmalig" },
+  { value: "daily", label: "Täglich" },
+  { value: "weekly", label: "Wöchentlich" },
+  { value: "monthly", label: "Monatlich" },
+  { value: "yearly", label: "Jährlich" },
+];
+const FREQUENCY_VALUES = new Set(FREQUENCY_TYPES.map((entry) => entry.value));
+
 class DonetickChoresCard extends HTMLElement {
   constructor() {
     super();
@@ -166,9 +179,9 @@ class DonetickChoresCard extends HTMLElement {
             <label>Fällig am<input name="due" type="datetime-local" value="${this._escape(this._draft.due)}"></label>
             <label>Wiederholung
               <select name="frequencyType">
-                <option value="once" ${this._draft.frequencyType === "once" ? "selected" : ""}>Einmalig</option>
-                <option value="daily" ${this._draft.frequencyType === "daily" ? "selected" : ""}>Täglich</option>
-                <option value="weekly" ${this._draft.frequencyType === "weekly" ? "selected" : ""}>Wöchentlich</option>
+                ${FREQUENCY_TYPES.map((entry) => `<option value="${entry.value}" ${
+                  this._draft.frequencyType === entry.value ? "selected" : ""
+                }>${entry.label}</option>`).join("")}
               </select>
             </label>
             <label>Priorität
@@ -212,8 +225,7 @@ class DonetickChoresCard extends HTMLElement {
     const userWasSelected = userId != null;
     const selectedUser = this._members().find((member) => Number(member.user_id) === Number(userId));
     const configEntryId = this._configEntryId();
-    const validFrequencyTypes = new Set(["once", "daily", "weekly"]);
-    const resolvedFrequencyType = validFrequencyTypes.has(this._draft.frequencyType)
+    const resolvedFrequencyType = FREQUENCY_VALUES.has(this._draft.frequencyType)
       ? this._draft.frequencyType
       : "once";
     const parsedPriority = Number(this._draft.priority);
@@ -249,7 +261,6 @@ class DonetickChoresCard extends HTMLElement {
         name: cleanTitle,
         description: String(description || "").trim(),
         frequency_type: resolvedFrequencyType,
-        frequency: 1,
         assign_strategy: selectedUser ? "keep_last_assigned" : "no_assignee",
         priority: resolvedPriority,
         is_rolling: false,
@@ -259,6 +270,9 @@ class DonetickChoresCard extends HTMLElement {
         data.assignee_ids = [Number(selectedUser.user_id)];
         data.assigned_to = Number(selectedUser.user_id);
       }
+      // frequency ist der Wiederholungsabstand und nur bei wiederkehrenden
+      // Aufgaben sinnvoll; bei "once" hat Donetick dafuer keine Verwendung.
+      if (resolvedFrequencyType !== "once") data.frequency = 1;
       if (parsedDue) data.next_due_date = parsedDue.toISOString();
       await this._hass.callService("donetick", "create_chore", data);
       this._dialogOpen = false;
