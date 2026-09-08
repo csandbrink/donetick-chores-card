@@ -17,10 +17,10 @@ jobs:
         uses: hacs/action@main
         with:
           category: plugin
-          # brands: nur fuer den offiziellen HACS-Index relevant.
-          # images: verlangt einen Screenshot in der README - ebenfalls eine
-          #   Anforderung des HACS-Index, nicht des Custom-Repository-Betriebs.
-          #   Beide entfernen, falls die Karte je in den HACS-Index soll.
+          # brands: only matters for the official HACS index.
+          # images: wants a screenshot in the README - again an index
+          #   requirement, not something running as a custom repository needs.
+          #   Drop both if this card ever goes into the HACS index.
           ignore: brands images
 
   test:
@@ -33,7 +33,7 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
-      - name: Syntaxpruefung
+      - name: Syntax check
         run: npm run check
-      - name: Testsuite
+      - name: Test suite
         run: npm test

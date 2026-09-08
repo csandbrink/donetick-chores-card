@@ -2,8 +2,8 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { loadCard, makeCard, makeHass, MEMBERS } from "./helpers.mjs";
 
-/** ISO-Zeitpunkt für "in n Tagen, 12 Uhr Ortszeit" – mittags, damit weder
- *  Zeitzone noch Sommerzeitumstellung den Kalendertag kippen können. */
+/** ISO timestamp for "n days from now, midday local time". Midday so that
+ *  neither the time zone nor a DST switch can tip the calendar day over. */
 const inDays = (days) => {
   const date = new Date();
   date.setDate(date.getDate() + days);
@@ -14,27 +14,27 @@ const inDays = (days) => {
 const card = () => makeCard(loadCard());
 
 describe("_dueText", () => {
-  test("ohne Termin", () => {
+  test("no due date", () => {
     assert.equal(card()._dueText(null), "Ohne Termin");
     assert.equal(card()._dueText(""), "Ohne Termin");
   });
 
-  test("unlesbarer Termin wird benannt statt verschwiegen", () => {
+  test("an unreadable due date is named rather than hidden", () => {
     assert.equal(card()._dueText("übermorgen vielleicht"), "Termin ungültig");
   });
 
-  test("heute, morgen, gestern", () => {
+  test("today, tomorrow, yesterday", () => {
     const c = card();
     assert.equal(c._dueText(inDays(0)), "Heute fällig");
     assert.equal(c._dueText(inDays(1)), "Morgen fällig");
     assert.equal(c._dueText(inDays(-1)), "Seit gestern fällig");
   });
 
-  test("länger überfällig wird gezählt", () => {
+  test("longer overdue gets counted", () => {
     assert.equal(card()._dueText(inDays(-4)), "Seit 4 Tagen fällig");
   });
 
-  test("weiter in der Zukunft steht das Datum", () => {
+  test("further out it shows the date", () => {
     const value = inDays(5);
     const expected = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit" })
       .format(new Date(value));
@@ -43,7 +43,7 @@ describe("_dueText", () => {
 });
 
 describe("_isOverdue", () => {
-  test("Vergangenheit ja, Zukunft nein, nichts nein", () => {
+  test("past yes, future no, nothing no", () => {
     const c = card();
     assert.equal(c._isOverdue(inDays(-1)), true);
     assert.equal(c._isOverdue(inDays(1)), false);
@@ -52,13 +52,13 @@ describe("_isOverdue", () => {
 });
 
 describe("_memberInitial", () => {
-  test("eindeutige Namen bekommen einen Buchstaben", () => {
+  test("unambiguous names get a single letter", () => {
     const c = card();
     assert.equal(c._memberInitial(MEMBERS[0], MEMBERS), "C");
     assert.equal(c._memberInitial(MEMBERS[1], MEMBERS), "I");
   });
 
-  test("bei gleicher Anfangsinitiale wird auf zwei Zeichen erweitert", () => {
+  test("a shared first letter expands to two characters", () => {
     const members = [
       { user_id: 1, display_name: "Jakob" },
       { user_id: 2, display_name: "Jana" },
@@ -67,10 +67,10 @@ describe("_memberInitial", () => {
     const c = card();
     assert.equal(c._memberInitial(members[0], members), "Ja");
     assert.equal(c._memberInitial(members[1], members), "Ja");
-    assert.equal(c._memberInitial(members[2], members), "P", "unbeteiligter Name bleibt kurz");
+    assert.equal(c._memberInitial(members[2], members), "P", "an unrelated name stays short");
   });
 
-  test("fehlender Name wird zu ?", () => {
+  test("a missing name becomes ?", () => {
     const members = [{ user_id: 1, display_name: "" }];
     assert.equal(card()._memberInitial(members[0], members), "?");
   });
@@ -84,23 +84,23 @@ describe("_relevantChange", () => {
   };
   const clone = (hass, changes = {}) => ({ ...hass, states: { ...hass.states, ...changes } });
 
-  test("identisches states-Objekt: nichts zu tun", () => {
+  test("identical states object: nothing to do", () => {
     const { c, hass } = setup();
     assert.equal(c._relevantChange(hass, { ...hass }), false);
   });
 
-  test("gleiche Referenzen in neuem Container: nichts zu tun", () => {
+  test("same references in a new container: nothing to do", () => {
     const { c, hass } = setup();
     assert.equal(c._relevantChange(hass, clone(hass)), false);
   });
 
-  test("fremde Entity geändert: nichts zu tun", () => {
+  test("unrelated entity changed: nothing to do", () => {
     const { c, hass } = setup();
     const next = clone(hass, { "light.kueche": { entity_id: "light.kueche", state: "on", attributes: {} } });
     assert.equal(c._relevantChange(hass, next), false);
   });
 
-  test("Aufgaben-Sensor geändert: neu rendern", () => {
+  test("chore sensor changed: re-render", () => {
     const { c, hass } = setup();
     const next = clone(hass, {
       "sensor.donetick_chores_1": { ...hass.states["sensor.donetick_chores_1"], state: "anders" },
@@ -108,13 +108,13 @@ describe("_relevantChange", () => {
     assert.equal(c._relevantChange(hass, next), true);
   });
 
-  test("todo-Entity geändert: neu rendern", () => {
+  test("todo entity changed: re-render", () => {
     const { c, hass } = setup();
     const next = clone(hass, { "todo.all_tasks": { ...hass.states["todo.all_tasks"], state: "9" } });
     assert.equal(c._relevantChange(hass, next), true);
   });
 
-  test("Sensor hinzugekommen oder entfernt: neu rendern", () => {
+  test("sensor added or removed: re-render", () => {
     const { c, hass } = setup();
     const added = clone(hass, {
       "sensor.donetick_chores_2": { entity_id: "sensor.donetick_chores_2", state: "neu", attributes: { task_id: 2 } },
@@ -134,28 +134,28 @@ describe("_pruneCompleted", () => {
     attributes: { task_id: id, next_due_date: due ?? null, is_active: true },
   });
 
-  test("unveränderter Termin: Buchung gilt weiter als offen", () => {
+  test("unchanged due date: the booking is still pending", () => {
     const c = card();
     c._completedTasks.set(1, { dueAtCompletion: "2026-09-10T00:00:00Z", at: Date.now() });
     c._pruneCompleted([taskState(1, "2026-09-10T00:00:00Z")]);
     assert.equal(c._completedTasks.has(1), true);
   });
 
-  test("neuer Termin: Donetick hat die Buchung verarbeitet", () => {
+  test("new due date: Donetick has processed the booking", () => {
     const c = card();
     c._completedTasks.set(1, { dueAtCompletion: "2026-09-10T00:00:00Z", at: Date.now() });
     c._pruneCompleted([taskState(1, "2026-09-11T00:00:00Z")]);
     assert.equal(c._completedTasks.has(1), false);
   });
 
-  test("Aufgabe verschwunden: Einmalaufgabe ist erledigt", () => {
+  test("chore gone: a one-off chore is done", () => {
     const c = card();
     c._completedTasks.set(1, { dueAtCompletion: "2026-09-10T00:00:00Z", at: Date.now() });
     c._pruneCompleted([]);
     assert.equal(c._completedTasks.has(1), false);
   });
 
-  test("Aufgabe ohne Termin bleibt bis zum Notausgang gebucht", () => {
+  test("a chore without a due date stays booked until the safety timeout", () => {
     const c = card();
     c._completedTasks.set(1, { dueAtCompletion: null, at: Date.now() });
     c._pruneCompleted([taskState(1, null)]);
@@ -163,12 +163,12 @@ describe("_pruneCompleted", () => {
 
     c._completedTasks.set(1, { dueAtCompletion: null, at: Date.now() - 121000 });
     c._pruneCompleted([taskState(1, null)]);
-    assert.equal(c._completedTasks.has(1), false, "nach 120 s gibt die Karte die Zeile frei");
+    assert.equal(c._completedTasks.has(1), false, "after 120 s the card releases the row");
   });
 });
 
 describe("getStubConfig", () => {
-  test("findet die Donetick-Liste an ihren circle_members", () => {
+  test("finds the Donetick list by its circle_members", () => {
     const env = loadCard();
     const CardClass = env.window.customElements.get("donetick-chores-card");
     const hass = {
@@ -184,7 +184,7 @@ describe("getStubConfig", () => {
     assert.equal(CardClass.getStubConfig(hass).todo_entity, "todo.haushalt");
   });
 
-  test("ohne passende Entity bleibt der Rückfall", () => {
+  test("falls back when no entity matches", () => {
     const env = loadCard();
     const CardClass = env.window.customElements.get("donetick-chores-card");
     assert.equal(CardClass.getStubConfig({ states: {} }).todo_entity, "todo.all_tasks");
@@ -192,8 +192,8 @@ describe("getStubConfig", () => {
   });
 });
 
-describe("Kartengröße", () => {
-  test("wächst mit der Anzahl der Aufgaben", () => {
+describe("Card sizing", () => {
+  test("grows with the number of chores", () => {
     const env = loadCard();
     const c = makeCard(env);
     assert.equal(c.getCardSize(), 1);
@@ -201,7 +201,7 @@ describe("Kartengröße", () => {
     assert.equal(c.getCardSize(), 4);
   });
 
-  test("meldet Grid-Optionen für das Sections-Layout", () => {
+  test("reports grid options for the sections layout", () => {
     assert.deepEqual({ ...card().getGridOptions() }, { rows: "auto", columns: "full", min_columns: 6 });
   });
 });

@@ -10,8 +10,8 @@ export const MEMBERS = [
 ];
 
 /**
- * Laedt die Karte in eine frische jsdom-Umgebung. Der Quelltext laeuft im
- * window-Kontext, benutzt also dieselben DOM-Klassen wie im Browser.
+ * Loads the card into a fresh jsdom environment. The source runs in the window
+ * context, so it uses the same DOM classes it would in a browser.
  *
  * @param {{adoptedStyleSheets?: boolean}} options
  */
@@ -23,8 +23,8 @@ export function loadCard({ adoptedStyleSheets = false } = {}) {
   const { window } = dom;
 
   if (adoptedStyleSheets && !("adoptedStyleSheets" in window.ShadowRoot.prototype)) {
-    // jsdom kennt adoptedStyleSheets nicht; fuer den Test des modernen Pfads
-    // reicht eine schlichte Eigenschaft.
+    // jsdom has no adoptedStyleSheets; a plain property is enough to exercise
+    // the modern path.
     Object.defineProperty(window.ShadowRoot.prototype, "adoptedStyleSheets", {
       configurable: true,
       writable: true,
@@ -36,7 +36,7 @@ export function loadCard({ adoptedStyleSheets = false } = {}) {
   return { dom, window, document: window.document };
 }
 
-/** Erzeugt eine konfigurierte, in das Dokument eingehaengte Karte. */
+/** Creates a configured card, attached to the document. */
 export function makeCard(env, config = { todo_entity: "todo.all_tasks" }) {
   const card = env.document.createElement("donetick-chores-card");
   card.setConfig(config);
@@ -45,7 +45,7 @@ export function makeCard(env, config = { todo_entity: "todo.all_tasks" }) {
 }
 
 /**
- * Baut ein hass-Objekt. `tasks` sind Kurzbeschreibungen:
+ * Builds a hass object. `tasks` are shorthand descriptions:
  * { id, name, due, assignedTo, isActive }
  */
 export function makeHass({
@@ -89,7 +89,7 @@ export function makeHass({
   };
 }
 
-/** Kopiert ein hass-Objekt und ersetzt einzelne States (neue Referenzen). */
+/** Copies a hass object, replacing individual states with new references. */
 export function withStates(hass, replacements) {
   const states = { ...hass.states };
   for (const [entityId, patch] of Object.entries(replacements)) {
@@ -108,9 +108,9 @@ export function withStates(hass, replacements) {
 }
 
 /**
- * Objekte, die im jsdom-Kontext entstanden sind, tragen dessen Prototypen.
- * assert.deepStrictEqual vergleicht Prototypen mit und schlaegt dann fehl,
- * obwohl der Inhalt stimmt. Dieser Klartext-Abzug umgeht das.
+ * Objects created inside the jsdom realm carry jsdom's prototypes.
+ * assert.deepStrictEqual compares prototypes too and fails even when the
+ * contents match, so this takes a JSON round trip first.
  */
 export const plain = (value) => JSON.parse(JSON.stringify(value));
 
