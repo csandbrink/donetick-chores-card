@@ -3,7 +3,7 @@
 Das Format orientiert sich an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/),
 die Versionierung an [Semantic Versioning](https://semver.org/lang/de/).
 
-## [Unveröffentlicht]
+## [1.1.0] – 2026-09-08
 
 Vollständige Überarbeitung auf Grundlage eines Code Reviews. Die Konfiguration
 der Karte ändert sich nicht – bestehende Dashboards laufen unverändert weiter.
