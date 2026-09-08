@@ -57,12 +57,14 @@ button:disabled { opacity: .55; cursor: wait; }
 .create-members { display: flex; flex-wrap: wrap; gap: 9px; }
 .create-member { min-width: 44px; height: 44px; padding: 0 12px; border: 1px solid var(--primary-color); border: 1px solid color-mix(in srgb, var(--primary-color) 50%, var(--divider-color)); border-radius: 22px; background: var(--card-background-color); background: color-mix(in srgb, var(--primary-color) 10%, var(--card-background-color)); color: var(--primary-color); font-weight: 700; cursor: pointer; }
 .create-member.selected { background: var(--primary-color); color: var(--text-primary-color); }
+.status-text { flex: 1; }
+.status-close { flex: 0 0 auto; box-sizing: content-box; width: 28px; height: 28px; padding: 8px; margin: -8px -4px -8px 0; border: 0; border-radius: 50%; background: transparent; color: var(--primary-text-color); font-size: 1.2rem; line-height: 1; cursor: pointer; }
 .form-error { border-radius: 10px; padding: 10px 12px; border: 1px solid var(--error-color); background: transparent; background: color-mix(in srgb, var(--error-color) 12%, transparent); color: var(--error-color); font-size: .85rem; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 2px; }
 .dialog-actions button { min-height: 40px; border: 0; border-radius: 10px; padding: 0 16px; cursor: pointer; }
 .cancel { background: transparent; color: var(--primary-text-color); }
 .save { background: var(--primary-color); color: var(--text-primary-color); font-weight: 600; }
-.status { margin: 0 14px 10px; border-radius: 10px; padding: 9px 12px; border: 1px solid var(--success-color, #43a047); background: transparent; background: color-mix(in srgb, var(--success-color, #43a047) 12%, transparent); color: var(--primary-text-color); font-size: .84rem; }
+.status { display: flex; align-items: center; gap: 8px; margin: 0 14px 10px; border-radius: 10px; padding: 9px 12px; border: 1px solid var(--success-color, #43a047); background: transparent; background: color-mix(in srgb, var(--success-color, #43a047) 12%, transparent); color: var(--primary-text-color); font-size: .84rem; }
 /* Auf Touch-Geraeten bleibt ein :hover-Zustand nach dem Antippen haengen, bis
    woanders hingetippt wird - auf einem Wand-Tablet sieht das aus, als sei ein
    Knopf dauerhaft aktiv. Deshalb nur fuer echte Zeigegeraete. */
@@ -121,6 +123,35 @@ class DonetickChoresCard extends HTMLElement {
     this._completedTasks = new Map();
     this._dialog = null;
     this._focusBeforeDialog = null;
+    this._statusTimer = null;
+  }
+
+  // Ohne das feuert der Timer noch, nachdem die Karte aus dem Dashboard
+  // entfernt wurde (Ansicht gewechselt, Karte bearbeitet).
+  disconnectedCallback() {
+    this._clearStatusTimer();
+  }
+
+  _clearStatusTimer() {
+    if (!this._statusTimer) return;
+    clearTimeout(this._statusTimer);
+    this._statusTimer = null;
+  }
+
+  /**
+   * Setzt die Meldung ueber der Liste. Erfolgsmeldungen verschwinden von
+   * selbst; Fehlermeldungen bleiben stehen, bis der Nutzer sie wegklickt oder
+   * die naechste Aktion sie ersetzt.
+   */
+  _setStatus(message, { autoDismiss = true } = {}) {
+    this._clearStatusTimer();
+    this._statusMessage = message;
+    if (!message || !autoDismiss) return;
+    this._statusTimer = setTimeout(() => {
+      this._statusTimer = null;
+      this._statusMessage = "";
+      this._render();
+    }, this.constructor.statusTimeoutMs);
   }
 
   setConfig(config) {
@@ -173,6 +204,9 @@ class DonetickChoresCard extends HTMLElement {
 
   // Masonry-Layout: Hoeheneinheiten a ~50 px. Kopfzeile plus eine Zeile je
   // Aufgabe kommt der tatsaechlichen Hoehe deutlich naeher als eine Konstante.
+  // Wie lange eine Erfolgsmeldung stehen bleibt, in Millisekunden.
+  static statusTimeoutMs = 8000;
+
   getCardSize() {
     return 1 + this._tasks().length;
   }
@@ -342,7 +376,7 @@ class DonetickChoresCard extends HTMLElement {
       this._dialogOpen = false;
       this._selectedCreateUserId = null;
       this._draft = { title: "", description: "", due: "", frequencyType: "once", priority: "0" };
-      this._statusMessage = "Aufgabe wurde hinzugefügt.";
+      this._setStatus("Aufgabe wurde hinzugefügt.");
     } catch (error) {
       this._formError = `Aufgabe konnte nicht hinzugefügt werden: ${error?.message || error}`;
       this._notify(this._formError);
@@ -359,12 +393,12 @@ class DonetickChoresCard extends HTMLElement {
     const memberExists = this._members().some((member) => Number(member.user_id) === Number(userId));
     const assignedToId = Number(assignedTo);
     if (!configEntryId) {
-      this._statusMessage = "Die Donetick-Konfigurations-ID fehlt. Bitte die Integration neu laden.";
+      this._setStatus("Die Donetick-Konfigurations-ID fehlt. Bitte die Integration neu laden.", { autoDismiss: false });
       this._render();
       return;
     }
     if (!memberExists) {
-      this._statusMessage = "Die ausgewählte Donetick-Person ist nicht mehr verfügbar.";
+      this._setStatus("Die ausgewählte Donetick-Person ist nicht mehr verfügbar.", { autoDismiss: false });
       this._render();
       return;
     }
@@ -372,7 +406,7 @@ class DonetickChoresCard extends HTMLElement {
     const dueAtCompletion = task?.attributes?.next_due_date ?? null;
     const taskName = task?.state ?? "Aufgabe";
     const member = this._members().find((candidate) => Number(candidate.user_id) === Number(userId));
-    this._statusMessage = "";
+    this._setStatus("");
     this._busyTaskIds.add(Number(taskId));
     this._render();
     try {
@@ -390,11 +424,11 @@ class DonetickChoresCard extends HTMLElement {
       // die Zeile lokal als erledigt fuehren, sonst sieht der Nutzer keine
       // Reaktion und bucht die Aufgabe ein zweites Mal.
       this._completedTasks.set(Number(taskId), { dueAtCompletion, at: Date.now() });
-      this._statusMessage = member
+      this._setStatus(member
         ? `„${taskName}" – erledigt von ${member.display_name}.`
-        : `„${taskName}" wurde als erledigt gebucht.`;
+        : `„${taskName}" wurde als erledigt gebucht.`);
     } catch (error) {
-      this._statusMessage = `Aufgabe konnte nicht abgeschlossen werden: ${error?.message || error}`;
+      this._setStatus(`Aufgabe konnte nicht abgeschlossen werden: ${error?.message || error}`, { autoDismiss: false });
       this._notify(this._statusMessage);
     } finally {
       this._busyTaskIds.delete(Number(taskId));
@@ -468,8 +502,22 @@ class DonetickChoresCard extends HTMLElement {
 
     const status = document.createElement("div");
     status.className = "status";
-    status.setAttribute("role", "status");
     status.hidden = true;
+    const statusText = document.createElement("span");
+    statusText.className = "status-text";
+    // Die Live-Region sitzt am Text, nicht am Container - sonst liest der
+    // Screenreader das "x" des Schliessen-Knopfes mit vor.
+    statusText.setAttribute("role", "status");
+    const statusClose = document.createElement("button");
+    statusClose.className = "status-close";
+    statusClose.type = "button";
+    statusClose.setAttribute("aria-label", "Meldung schließen");
+    statusClose.textContent = "×";
+    statusClose.addEventListener("click", () => {
+      this._setStatus("");
+      this._render();
+    });
+    status.append(statusText, statusClose);
 
     const list = document.createElement("div");
     list.className = "list";
@@ -484,7 +532,7 @@ class DonetickChoresCard extends HTMLElement {
     dialogHost.className = "dialog-host";
 
     this.shadowRoot.append(card, dialogHost);
-    this._shell = { card, title, count, add, status, list, dialogHost };
+    this._shell = { card, title, count, add, status, statusText, list, dialogHost };
     this._rows = new Map();
     this._bindShellEvents();
   }
@@ -522,7 +570,7 @@ class DonetickChoresCard extends HTMLElement {
     this._dialogOpen = true;
     this._selectedCreateUserId = null;
     this._draft = { title: "", description: "", due: "", frequencyType: "once", priority: "0" };
-    this._statusMessage = "";
+    this._setStatus("");
     this._formError = this._members().length
       ? (this._configEntryId() ? "" : "Die Donetick-Konfigurations-ID fehlt. Bitte die Integration neu laden.")
       : "Keine Donetick-Benutzer verfügbar. Bitte die Integration neu laden.";
@@ -911,7 +959,7 @@ class DonetickChoresCard extends HTMLElement {
     if (!this.shadowRoot || !this._config) return;
     this._ensureShell();
 
-    const { title, count, status, list } = this._shell;
+    const { title, count, status, statusText, list } = this._shell;
     title.textContent = this._config.title;
 
     if (!this._hass) {
@@ -927,7 +975,7 @@ class DonetickChoresCard extends HTMLElement {
 
     count.textContent = `${tasks.length - this._completedTasks.size} offen`;
 
-    status.textContent = this._statusMessage;
+    statusText.textContent = this._statusMessage;
     status.hidden = !this._statusMessage;
 
     this._renderRows(tasks, members);

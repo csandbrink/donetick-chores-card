@@ -340,3 +340,70 @@ describe("Dialog", () => {
     assert.deepEqual(buttons.map((b) => b.getAttribute("aria-pressed")), ["false", "true", "false"]);
   });
 });
+
+describe("Statusmeldung", () => {
+  const cardClass = (env) => env.window.customElements.get("donetick-chores-card");
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  test("Erfolgsmeldung verschwindet von selbst", async () => {
+    const env = loadCard();
+    cardClass(env).statusTimeoutMs = 20;
+    const card = makeCard(env);
+    card.hass = makeHass({ tasks: [{ id: 7 }] });
+
+    card.shadowRoot.querySelector("button.check").click();
+    card.shadowRoot.querySelector("button.member").click();
+    await flush();
+    assert.equal(card.shadowRoot.querySelector(".status").hidden, false);
+
+    await wait(50);
+    assert.equal(card.shadowRoot.querySelector(".status").hidden, true);
+  });
+
+  test("Fehlermeldung bleibt stehen", async () => {
+    const env = loadCard();
+    cardClass(env).statusTimeoutMs = 20;
+    const card = makeCard(env);
+    card.hass = makeHass({
+      tasks: [{ id: 7 }],
+      callService: async () => { throw new Error("kaputt"); },
+    });
+
+    card.shadowRoot.querySelector("button.check").click();
+    card.shadowRoot.querySelector("button.member").click();
+    await flush();
+    await wait(50);
+
+    assert.equal(card.shadowRoot.querySelector(".status").hidden, false,
+      "ein Fehler darf nicht unbemerkt verschwinden");
+  });
+
+  test("lässt sich von Hand schließen", async () => {
+    const env = loadCard();
+    const card = makeCard(env);
+    card.hass = makeHass({ tasks: [{ id: 7 }] });
+
+    card.shadowRoot.querySelector("button.check").click();
+    card.shadowRoot.querySelector("button.member").click();
+    await flush();
+    assert.equal(card.shadowRoot.querySelector(".status").hidden, false);
+
+    card.shadowRoot.querySelector(".status-close").click();
+    assert.equal(card.shadowRoot.querySelector(".status").hidden, true);
+  });
+
+  test("der Timer stoppt, wenn die Karte aus dem Dashboard fliegt", async () => {
+    const env = loadCard();
+    cardClass(env).statusTimeoutMs = 20;
+    const card = makeCard(env);
+    card.hass = makeHass({ tasks: [{ id: 7 }] });
+
+    card.shadowRoot.querySelector("button.check").click();
+    card.shadowRoot.querySelector("button.member").click();
+    await flush();
+    assert.ok(card._statusTimer);
+
+    card.remove();
+    assert.equal(card._statusTimer, null, "kein Timer, der ins Leere feuert");
+  });
+});
