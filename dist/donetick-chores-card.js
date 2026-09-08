@@ -158,11 +158,26 @@ class DonetickChoresCard extends HTMLElement {
     if (!config || !config.todo_entity) {
       throw new Error("todo_entity ist erforderlich");
     }
+    const previous = this._config;
     this._config = {
       title: "Aufgaben",
       sensor_prefix: "sensor.donetick_chores_",
       ...config,
     };
+
+    // Zeigt die Karte auf eine andere Quelle, ist der bisherige Zustand
+    // wertlos und teils irrefuehrend: aufgeklappte Zeile, gebuchte Aufgaben und
+    // laufende Buchungen beziehen sich auf task_ids der alten Quelle.
+    const sourceChanged =
+      previous &&
+      (previous.todo_entity !== this._config.todo_entity ||
+        previous.sensor_prefix !== this._config.sensor_prefix);
+    if (sourceChanged) {
+      this._expandedTaskId = null;
+      this._completedTasks.clear();
+      this._busyTaskIds.clear();
+      this._setStatus("");
+    }
     this._render();
   }
 
@@ -959,15 +974,19 @@ class DonetickChoresCard extends HTMLElement {
     if (!this.shadowRoot || !this._config) return;
     this._ensureShell();
 
-    const { title, count, status, statusText, list } = this._shell;
+    const { title, count, status, statusText, list, add } = this._shell;
     title.textContent = this._config.title;
 
     if (!this._hass) {
       count.textContent = "";
+      // Ohne hass laesst sich nichts anlegen - ein Knopf, der auf Klick nichts
+      // tut, ist schlechter als ein sichtbar gesperrter.
+      add.disabled = true;
       this._rows.clear();
       list.replaceChildren(this._placeholder("loading", "Lade Aufgaben …"));
       return;
     }
+    add.disabled = false;
 
     const tasks = this._tasks();
     const members = this._members();

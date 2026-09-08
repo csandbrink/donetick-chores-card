@@ -269,3 +269,50 @@ describe("Stylesheet-Regeln", () => {
     }
   });
 });
+
+describe("Konfigurationswechsel", () => {
+  test("Wechsel der Datenquelle verwirft den alten Zustand", async () => {
+    const env = loadCard();
+    const card = makeCard(env);
+    const hass = makeHass({ tasks: [{ id: 7 }] });
+    card.hass = hass;
+
+    card.shadowRoot.querySelector("button.check").click();
+    card.shadowRoot.querySelector("button.member").click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(card._completedTasks.size, 1);
+
+    card.setConfig({ todo_entity: "todo.andere_liste" });
+    assert.equal(card._completedTasks.size, 0, "gebuchte task_ids der alten Quelle");
+    assert.equal(card._expandedTaskId, null);
+    assert.equal(card._busyTaskIds.size, 0);
+  });
+
+  test("gleiche Quelle, nur neuer Titel: Zustand bleibt", () => {
+    const env = loadCard();
+    const card = makeCard(env);
+    card.hass = makeHass({ tasks: [{ id: 7 }] });
+    card.shadowRoot.querySelector("button.check").click();
+    assert.equal(card._expandedTaskId, 7);
+
+    card.setConfig({ todo_entity: "todo.all_tasks", title: "Neuer Titel" });
+    assert.equal(card._expandedTaskId, 7, "kein Grund, die Auswahl zu verwerfen");
+    assert.equal(text(card.shadowRoot.querySelector(".title")), "Neuer Titel");
+  });
+
+  test("Plus-Button ist gesperrt, solange keine Daten da sind", () => {
+    const env = loadCard();
+    const card = makeCard(env);
+    assert.equal(card.shadowRoot.querySelector("button.add").disabled, true);
+
+    card.hass = makeHass({ tasks: [] });
+    assert.equal(card.shadowRoot.querySelector("button.add").disabled, false);
+  });
+
+  test("setConfig ohne todo_entity wirft", () => {
+    const env = loadCard();
+    const card = env.document.createElement("donetick-chores-card");
+    assert.throws(() => card.setConfig({}), /todo_entity/);
+    assert.throws(() => card.setConfig(null), /todo_entity/);
+  });
+});
