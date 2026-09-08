@@ -211,3 +211,61 @@ describe("DOM-Stabilität", () => {
     assert.equal(after[0], keep);
   });
 });
+
+describe("Stylesheet-Regeln", () => {
+  // Kommentare fliegen raus: sie enthalten Begriffe wie ":hover", die die
+  // Prüfungen unten sonst falsch anschlagen lassen.
+  const css = () => {
+    const env = loadCard({ adoptedStyleSheets: false });
+    const card = makeCard(env);
+    return card.shadowRoot.querySelector("style").textContent.replace(/\/\*[\s\S]*?\*\//g, "");
+  };
+
+  const ruleFor = (text, selector) =>
+    text.split("\n").find((line) => line.trimStart().startsWith(`${selector} {`));
+
+  test("Touch-Ziele sind mindestens 44 px hoch", () => {
+    const text = css();
+    for (const selector of [".add", ".check", ".member", ".create-member"]) {
+      const rule = ruleFor(text, selector);
+      assert.ok(rule, `Regel für ${selector} gefunden`);
+      const height = /height:\s*(\d+)px/.exec(rule);
+      assert.ok(height, `${selector} hat eine feste Höhe`);
+      assert.ok(Number(height[1]) >= 44, `${selector} ist ${height[1]}px, erwartet >= 44px`);
+    }
+  });
+
+  test("Hover-Regeln stehen ausschließlich im hover-Media-Query", () => {
+    const text = css();
+    const marker = text.indexOf("@media (hover: hover)");
+    assert.ok(marker > -1, "hover-Media-Query vorhanden");
+    assert.equal(
+      /:hover/.test(text.slice(0, marker)),
+      false,
+      "kein :hover außerhalb – sonst klebt der Zustand auf Touch-Geräten",
+    );
+    assert.ok(/:hover/.test(text.slice(marker)));
+  });
+
+  test("jede color-mix-Deklaration hat einen einfachen Fallback davor", () => {
+    const lines = css().split("\n").filter((line) => line.includes("color-mix") && line.includes("{"));
+    assert.ok(lines.length > 0, "es gibt color-mix-Regeln zu prüfen");
+
+    for (const line of lines) {
+      const body = line.slice(line.indexOf("{") + 1, line.lastIndexOf("}"));
+      const declarations = body
+        .split(";")
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .map((entry) => [entry.slice(0, entry.indexOf(":")).trim(), entry.slice(entry.indexOf(":") + 1).trim()]);
+
+      declarations.forEach(([property, value], index) => {
+        if (!value.includes("color-mix")) return;
+        const hasFallback = declarations
+          .slice(0, index)
+          .some(([earlier, earlierValue]) => earlier === property && !earlierValue.includes("color-mix"));
+        assert.ok(hasFallback, `${property} ohne Fallback in: ${line.trim()}`);
+      });
+    }
+  });
+});

@@ -19,17 +19,15 @@ ha-card { overflow: hidden; }
 .header { padding: 14px 14px 10px 20px; display: flex; align-items: center; gap: 12px; }
 .title { flex: 1; font-size: 1.25rem; font-weight: 600; color: var(--primary-text-color); }
 .count { font-size: .82rem; color: var(--secondary-text-color); }
-.add { width: 40px; height: 40px; border: 0; border-radius: 50%; background: transparent; color: var(--primary-color); cursor: pointer; display: grid; place-items: center; }
-.add:hover { background: color-mix(in srgb, var(--primary-color) 12%, transparent); }
+.add { width: 44px; height: 44px; border: 0; border-radius: 50%; background: transparent; color: var(--primary-color); cursor: pointer; display: grid; place-items: center; }
 .add ha-icon { --mdc-icon-size: 25px; }
 .list { padding: 0 10px 10px; }
 .task { border-top: 1px solid var(--divider-color); padding: 8px 4px; transition: background .15s ease; }
 .task:first-child { border-top: 0; }
-.task.expanded { background: color-mix(in srgb, var(--primary-color) 6%, transparent); border-radius: 12px; }
+.task.expanded { background: var(--secondary-background-color); background: color-mix(in srgb, var(--primary-color) 6%, transparent); border-radius: 12px; }
 .task-main { min-height: 48px; display: flex; align-items: center; }
 button { font: inherit; }
 .check { width: 44px; height: 44px; flex: 0 0 44px; border: 0; border-radius: 50%; background: transparent; color: var(--primary-color); cursor: pointer; display: grid; place-items: center; }
-.check:hover { background: color-mix(in srgb, var(--primary-color) 12%, transparent); }
 .check ha-icon { --mdc-icon-size: 27px; }
 .assignee-initial { width: 28px; height: 28px; display: grid; place-items: center; border: 2px solid currentColor; border-radius: 50%; font-size: .72rem; line-height: 1; font-weight: 700; }
 .text { min-width: 0; padding: 3px 8px 3px 2px; }
@@ -39,10 +37,9 @@ button { font: inherit; }
 .task.done .name { text-decoration: line-through; opacity: .55; }
 .task.done .due { font-style: italic; }
 .task.done .check { color: var(--success-color, #43a047); cursor: default; }
-.chooser { display: flex; align-items: center; gap: 9px; padding: 4px 8px 8px 50px; }
+.chooser { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; padding: 4px 8px 8px 50px; }
 .chooser-label { color: var(--secondary-text-color); font-size: .78rem; margin-right: 2px; }
-.member { width: 34px; height: 34px; border: 1px solid color-mix(in srgb, var(--primary-color) 50%, var(--divider-color)); border-radius: 50%; background: color-mix(in srgb, var(--primary-color) 12%, var(--card-background-color)); color: var(--primary-color); font-weight: 700; cursor: pointer; box-shadow: none; }
-.member:hover { background: var(--primary-color); color: var(--text-primary-color); transform: translateY(-1px); }
+.member { width: 44px; height: 44px; flex: 0 0 44px; border: 1px solid var(--primary-color); border: 1px solid color-mix(in srgb, var(--primary-color) 50%, var(--divider-color)); border-radius: 50%; background: var(--card-background-color); background: color-mix(in srgb, var(--primary-color) 12%, var(--card-background-color)); color: var(--primary-color); font-weight: 700; cursor: pointer; box-shadow: none; }
 button:disabled { opacity: .55; cursor: wait; }
 .empty, .loading { padding: 20px; color: var(--secondary-text-color); }
 .spinner { width: 19px; height: 19px; border: 2px solid var(--divider-color); border-top-color: var(--primary-color); border-radius: 50%; animation: spin .8s linear infinite; }
@@ -58,14 +55,23 @@ button:disabled { opacity: .55; cursor: wait; }
 .create-form fieldset { margin: 0; padding: 0; border: 0; }
 .create-form legend { margin-bottom: 8px; color: var(--secondary-text-color); font-size: .85rem; }
 .create-members { display: flex; flex-wrap: wrap; gap: 9px; }
-.create-member { min-width: 38px; height: 38px; padding: 0 10px; border: 1px solid color-mix(in srgb, var(--primary-color) 50%, var(--divider-color)); border-radius: 19px; background: color-mix(in srgb, var(--primary-color) 10%, var(--card-background-color)); color: var(--primary-color); font-weight: 700; cursor: pointer; }
+.create-member { min-width: 44px; height: 44px; padding: 0 12px; border: 1px solid var(--primary-color); border: 1px solid color-mix(in srgb, var(--primary-color) 50%, var(--divider-color)); border-radius: 22px; background: var(--card-background-color); background: color-mix(in srgb, var(--primary-color) 10%, var(--card-background-color)); color: var(--primary-color); font-weight: 700; cursor: pointer; }
 .create-member.selected { background: var(--primary-color); color: var(--text-primary-color); }
-.form-error { border-radius: 10px; padding: 10px 12px; background: color-mix(in srgb, var(--error-color) 12%, transparent); color: var(--error-color); font-size: .85rem; }
+.form-error { border-radius: 10px; padding: 10px 12px; border: 1px solid var(--error-color); background: transparent; background: color-mix(in srgb, var(--error-color) 12%, transparent); color: var(--error-color); font-size: .85rem; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 2px; }
 .dialog-actions button { min-height: 40px; border: 0; border-radius: 10px; padding: 0 16px; cursor: pointer; }
 .cancel { background: transparent; color: var(--primary-text-color); }
 .save { background: var(--primary-color); color: var(--text-primary-color); font-weight: 600; }
-.status { margin: 0 14px 10px; border-radius: 10px; padding: 9px 12px; background: color-mix(in srgb, var(--success-color, #43a047) 12%, transparent); color: var(--primary-text-color); font-size: .84rem; }
+.status { margin: 0 14px 10px; border-radius: 10px; padding: 9px 12px; border: 1px solid var(--success-color, #43a047); background: transparent; background: color-mix(in srgb, var(--success-color, #43a047) 12%, transparent); color: var(--primary-text-color); font-size: .84rem; }
+/* Auf Touch-Geraeten bleibt ein :hover-Zustand nach dem Antippen haengen, bis
+   woanders hingetippt wird - auf einem Wand-Tablet sieht das aus, als sei ein
+   Knopf dauerhaft aktiv. Deshalb nur fuer echte Zeigegeraete. */
+@media (hover: hover) and (pointer: fine) {
+  .add:hover { background: var(--divider-color); background: color-mix(in srgb, var(--primary-color) 12%, transparent); }
+  .check:hover:not(:disabled) { background: var(--divider-color); background: color-mix(in srgb, var(--primary-color) 12%, transparent); }
+  .member:hover:not(:disabled) { background: var(--primary-color); color: var(--text-primary-color); transform: translateY(-1px); }
+}
+
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 420px) {
   .header { padding-inline: 16px; }
