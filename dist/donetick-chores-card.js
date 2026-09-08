@@ -3,7 +3,7 @@ class DonetickChoresCard extends HTMLElement {
     super();
     this.attachShadow({ mode: "open" });
     this._expandedTaskId = null;
-    this._busyTaskId = null;
+    this._busyTaskIds = new Set();
     this._dialogOpen = false;
     this._busyCreate = false;
     this._selectedCreateUserId = null;
@@ -269,7 +269,7 @@ class DonetickChoresCard extends HTMLElement {
   }
 
   async _complete(taskId, userId, assignedTo = null) {
-    if (this._busyTaskId != null) return;
+    if (this._busyTaskIds.has(Number(taskId))) return;
     if (this._completedTasks.has(Number(taskId))) return;
     const configEntryId = this._configEntryId();
     const memberExists = this._members().some((member) => Number(member.user_id) === Number(userId));
@@ -289,7 +289,7 @@ class DonetickChoresCard extends HTMLElement {
     const taskName = task?.state ?? "Aufgabe";
     const member = this._members().find((candidate) => Number(candidate.user_id) === Number(userId));
     this._statusMessage = "";
-    this._busyTaskId = taskId;
+    this._busyTaskIds.add(Number(taskId));
     this._render();
     try {
       const data = {
@@ -315,7 +315,7 @@ class DonetickChoresCard extends HTMLElement {
       event.detail = { message: this._statusMessage };
       this.dispatchEvent(event);
     } finally {
-      this._busyTaskId = null;
+      this._busyTaskIds.delete(Number(taskId));
       this._render();
     }
   }
@@ -433,7 +433,7 @@ class DonetickChoresCard extends HTMLElement {
       const assignedInitial = assignedMember ? this._memberInitial(assignedMember, members) : null;
       const done = this._completedTasks.has(taskId);
       const expanded = this._expandedTaskId === taskId && !done;
-      const busy = this._busyTaskId === taskId;
+      const busy = this._busyTaskIds.has(taskId);
       const checkContent = busy
         ? '<span class="spinner"></span>'
         : done
