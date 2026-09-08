@@ -17,6 +17,8 @@ Die Oberfläche ist deutschsprachig.
 - Dialog zum Anlegen neuer Aufgaben (Titel, Beschreibung, Fälligkeit,
   Wiederholung, Priorität, Zuständigkeit) über `donetick.create_chore`
 - Initialen werden bei Namensgleichheit automatisch auf zwei Zeichen erweitert
+- Gebuchte Aufgaben bleiben sichtbar markiert, bis Donetick die Buchung
+  bestätigt hat – damit niemand aus Unsicherheit ein zweites Mal abhakt
 
 ## Voraussetzungen
 
@@ -65,6 +67,14 @@ todo_entity: todo.all_tasks
 | `title`         | string | nein    | `Aufgaben`                 | Überschrift der Karte |
 | `sensor_prefix` | string | nein    | `sensor.donetick_chores_`  | Präfix, nach dem die Aufgaben-Sensoren gesucht werden |
 
+### Wiederholungen
+
+Der Dialog bietet *einmalig*, *täglich*, *wöchentlich*, *monatlich* und
+*jährlich*. Die übrigen Typen von `donetick.create_chore` (`adaptive`,
+`interval`, `days_of_the_week`, `day_of_the_month`, …) brauchen zusätzlich
+`frequency_metadata` und wären ohne eigene Eingabefelder eine Auswahl, die dann
+nicht funktioniert.
+
 ### Beispiel mit allen Optionen
 
 ```yaml
@@ -73,6 +83,30 @@ todo_entity: todo.all_tasks
 title: Haushalt
 sensor_prefix: sensor.donetick_chores_
 ```
+
+## Barrierefreiheit und Tablets
+
+Die Karte ist für den Dauerbetrieb auf einem Wand-Tablet ausgelegt:
+
+- Alle Bedienelemente sind mindestens 44 × 44 px groß.
+- Hover-Zustände gelten nur für echte Zeigegeräte (`@media (hover: hover)`),
+  damit sie auf Touch-Geräten nicht nach dem Antippen kleben bleiben.
+- Jede `color-mix()`-Deklaration hat einen einfachen Fallback davor, damit auf
+  älteren Browsern nicht die ganze Deklaration ausfällt.
+- Der Dialog fängt den Tastaturfokus, lässt sich mit Escape schließen und gibt
+  den Fokus danach dorthin zurück, wo er vorher war.
+- Der Fokus überlebt Datenupdates – die Karte baut ihr DOM nicht neu auf.
+
+## Entwicklung
+
+```bash
+npm install
+npm test      # Testsuite (jsdom)
+npm run check # Syntaxprüfung
+```
+
+Zum Aufbau der Tests siehe [`test/README.md`](test/README.md).
+Änderungen sind im [Changelog](CHANGELOG.md) festgehalten.
 
 ## Lizenz
 
