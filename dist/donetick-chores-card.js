@@ -11,6 +11,87 @@ const FREQUENCY_TYPES = [
 ];
 const FREQUENCY_VALUES = new Set(FREQUENCY_TYPES.map((entry) => entry.value));
 
+// Das Stylesheet wird einmal je Seite geparst und von allen Karteninstanzen
+// geteilt, statt bei jedem Render neu in den Shadow-Root geschrieben zu werden.
+const STYLES = `
+:host { display: block; }
+ha-card { overflow: hidden; }
+.header { padding: 14px 14px 10px 20px; display: flex; align-items: center; gap: 12px; }
+.title { flex: 1; font-size: 1.25rem; font-weight: 600; color: var(--primary-text-color); }
+.count { font-size: .82rem; color: var(--secondary-text-color); }
+.add { width: 40px; height: 40px; border: 0; border-radius: 50%; background: transparent; color: var(--primary-color); cursor: pointer; display: grid; place-items: center; }
+.add:hover { background: color-mix(in srgb, var(--primary-color) 12%, transparent); }
+.add ha-icon { --mdc-icon-size: 25px; }
+.list { padding: 0 10px 10px; }
+.task { border-top: 1px solid var(--divider-color); padding: 8px 4px; transition: background .15s ease; }
+.task:first-child { border-top: 0; }
+.task.expanded { background: color-mix(in srgb, var(--primary-color) 6%, transparent); border-radius: 12px; }
+.task-main { min-height: 48px; display: flex; align-items: center; }
+button { font: inherit; }
+.check { width: 44px; height: 44px; flex: 0 0 44px; border: 0; border-radius: 50%; background: transparent; color: var(--primary-color); cursor: pointer; display: grid; place-items: center; }
+.check:hover { background: color-mix(in srgb, var(--primary-color) 12%, transparent); }
+.check ha-icon { --mdc-icon-size: 27px; }
+.assignee-initial { width: 28px; height: 28px; display: grid; place-items: center; border: 2px solid currentColor; border-radius: 50%; font-size: .72rem; line-height: 1; font-weight: 700; }
+.text { min-width: 0; padding: 3px 8px 3px 2px; }
+.name { color: var(--primary-text-color); font-size: .98rem; line-height: 1.3; overflow-wrap: anywhere; }
+.due { color: var(--secondary-text-color); font-size: .78rem; margin-top: 2px; }
+.due.overdue { color: var(--error-color); }
+.task.done .name { text-decoration: line-through; opacity: .55; }
+.task.done .due { font-style: italic; }
+.task.done .check { color: var(--success-color, #43a047); cursor: default; }
+.chooser { display: flex; align-items: center; gap: 9px; padding: 4px 8px 8px 50px; }
+.chooser-label { color: var(--secondary-text-color); font-size: .78rem; margin-right: 2px; }
+.member { width: 34px; height: 34px; border: 1px solid color-mix(in srgb, var(--primary-color) 50%, var(--divider-color)); border-radius: 50%; background: color-mix(in srgb, var(--primary-color) 12%, var(--card-background-color)); color: var(--primary-color); font-weight: 700; cursor: pointer; box-shadow: none; }
+.member:hover { background: var(--primary-color); color: var(--text-primary-color); transform: translateY(-1px); }
+button:disabled { opacity: .55; cursor: wait; }
+.empty, .loading { padding: 20px; color: var(--secondary-text-color); }
+.spinner { width: 19px; height: 19px; border: 2px solid var(--divider-color); border-top-color: var(--primary-color); border-radius: 50%; animation: spin .8s linear infinite; }
+.dialog-backdrop { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .48); }
+.dialog { box-sizing: border-box; width: min(460px, 100%); max-height: calc(100vh - 32px); overflow: auto; border-radius: 18px; background: var(--card-background-color); color: var(--primary-text-color); box-shadow: 0 16px 50px rgba(0, 0, 0, .35); }
+.dialog-header { display: flex; align-items: center; padding: 18px 20px 8px; }
+.dialog-header h2 { flex: 1; margin: 0; font-size: 1.25rem; }
+.dialog-close { width: 40px; height: 40px; border: 0; border-radius: 50%; background: transparent; color: var(--secondary-text-color); font-size: 1.7rem; cursor: pointer; }
+.create-form { display: grid; gap: 15px; padding: 10px 20px 20px; }
+.create-form label { display: grid; gap: 6px; color: var(--secondary-text-color); font-size: .85rem; }
+.create-form input, .create-form textarea, .create-form select { box-sizing: border-box; width: 100%; border: 1px solid var(--divider-color); border-radius: 10px; padding: 11px 12px; background: var(--card-background-color); color: var(--primary-text-color); font: inherit; }
+.create-form input:focus, .create-form textarea:focus, .create-form select:focus { outline: 2px solid var(--primary-color); outline-offset: 1px; }
+.create-form fieldset { margin: 0; padding: 0; border: 0; }
+.create-form legend { margin-bottom: 8px; color: var(--secondary-text-color); font-size: .85rem; }
+.create-members { display: flex; flex-wrap: wrap; gap: 9px; }
+.create-member { min-width: 38px; height: 38px; padding: 0 10px; border: 1px solid color-mix(in srgb, var(--primary-color) 50%, var(--divider-color)); border-radius: 19px; background: color-mix(in srgb, var(--primary-color) 10%, var(--card-background-color)); color: var(--primary-color); font-weight: 700; cursor: pointer; }
+.create-member.selected { background: var(--primary-color); color: var(--text-primary-color); }
+.form-error { border-radius: 10px; padding: 10px 12px; background: color-mix(in srgb, var(--error-color) 12%, transparent); color: var(--error-color); font-size: .85rem; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 2px; }
+.dialog-actions button { min-height: 40px; border: 0; border-radius: 10px; padding: 0 16px; cursor: pointer; }
+.cancel { background: transparent; color: var(--primary-text-color); }
+.save { background: var(--primary-color); color: var(--text-primary-color); font-weight: 600; }
+.status { margin: 0 14px 10px; border-radius: 10px; padding: 9px 12px; background: color-mix(in srgb, var(--success-color, #43a047) 12%, transparent); color: var(--primary-text-color); font-size: .84rem; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (max-width: 420px) {
+  .header { padding-inline: 16px; }
+  .chooser { padding-left: 46px; }
+  .chooser-label { display: none; }
+}
+.chooser[hidden] { display: none; }
+`;
+
+let cachedStyleSheet;
+function sharedStyleSheet() {
+  if (cachedStyleSheet !== undefined) return cachedStyleSheet;
+  try {
+    if (typeof CSSStyleSheet !== "undefined" && "replaceSync" in CSSStyleSheet.prototype) {
+      const sheet = new CSSStyleSheet();
+      sheet.replaceSync(STYLES);
+      cachedStyleSheet = sheet;
+      return cachedStyleSheet;
+    }
+  } catch (error) {
+    // Aeltere Engines: faellt unten auf ein <style>-Element zurueck.
+  }
+  cachedStyleSheet = null;
+  return cachedStyleSheet;
+}
+
 class DonetickChoresCard extends HTMLElement {
   constructor() {
     super();
@@ -386,54 +467,302 @@ class DonetickChoresCard extends HTMLElement {
     this._render();
   }
 
-  _bindEvents() {
-    this.shadowRoot.querySelector(".add")?.addEventListener("click", () => {
-      this._dialogOpen = true;
-      this._selectedCreateUserId = null;
-      this._draft = { title: "", description: "", due: "", frequencyType: "once", priority: "0" };
-      this._statusMessage = "";
-      this._formError = this._members().length
-        ? (this._configEntryId() ? "" : "Die Donetick-Konfigurations-ID fehlt. Bitte die Integration neu laden.")
-        : "Keine Donetick-Benutzer verfügbar. Bitte die Integration neu laden.";
-      this._render();
-      this.shadowRoot.querySelector('input[name="title"]')?.focus();
-    });
+  // ---------------------------------------------------------------------------
+  // Rendering
+  //
+  // Die Karte wird nicht mehr bei jedem Update komplett neu aufgebaut. Das
+  // Grundgeruest entsteht einmal (_ensureShell), danach werden nur die Stellen
+  // angefasst, die sich tatsaechlich geaendert haben. Texte gehen ueber
+  // textContent statt durch String-Templating: aus Donetick-Daten kann damit
+  // gar kein HTML mehr entstehen.
+  // ---------------------------------------------------------------------------
 
-    this.shadowRoot.querySelectorAll("button.check").forEach((button) => {
-      button.addEventListener("click", () => {
-        const taskId = Number(button.dataset.taskId);
+  _ensureShell() {
+    if (this._shell) return;
+
+    const sheet = sharedStyleSheet();
+    if (sheet && "adoptedStyleSheets" in this.shadowRoot) {
+      this.shadowRoot.adoptedStyleSheets = [sheet];
+    } else {
+      const style = document.createElement("style");
+      style.textContent = STYLES;
+      this.shadowRoot.append(style);
+    }
+
+    const card = document.createElement("ha-card");
+
+    const header = document.createElement("div");
+    header.className = "header";
+    const title = document.createElement("div");
+    title.className = "title";
+    const count = document.createElement("div");
+    count.className = "count";
+    const add = document.createElement("button");
+    add.className = "add";
+    add.type = "button";
+    add.title = "Aufgabe hinzufügen";
+    add.setAttribute("aria-label", "Aufgabe hinzufügen");
+    const addIcon = document.createElement("ha-icon");
+    addIcon.setAttribute("icon", "mdi:plus");
+    add.append(addIcon);
+    header.append(title, count, add);
+
+    const status = document.createElement("div");
+    status.className = "status";
+    status.setAttribute("role", "status");
+    status.hidden = true;
+
+    const list = document.createElement("div");
+    list.className = "list";
+
+    card.append(header, status, list);
+
+    // Der Dialog liegt bewusst ausserhalb der ha-card. ha-card traegt
+    // overflow: hidden, und ein position:fixed-Kind wird davon beschnitten,
+    // sobald irgendein Vorfahre einen Containing-Block aufspannt (transform,
+    // filter, contain) - im HA-Layout jederzeit moeglich.
+    const dialogHost = document.createElement("div");
+    dialogHost.className = "dialog-host";
+
+    this.shadowRoot.append(card, dialogHost);
+    this._shell = { card, title, count, add, status, list, dialogHost };
+    this._rows = new Map();
+    this._bindShellEvents();
+  }
+
+  // Die Zeilen werden laufend erzeugt und verworfen. Einzelne Listener muessten
+  // dabei jedes Mal neu gesetzt werden - Delegation auf der Liste nicht.
+  _bindShellEvents() {
+    const { add, list } = this._shell;
+
+    add.addEventListener("click", () => this._openDialog());
+
+    list.addEventListener("click", (event) => {
+      const check = event.target.closest?.("button.check");
+      if (check && !check.disabled) {
+        const taskId = Number(check.dataset.taskId);
         this._expandedTaskId = this._expandedTaskId === taskId ? null : taskId;
         this._render();
-      });
-    });
-    this.shadowRoot.querySelectorAll("button.member").forEach((button) => {
-      button.addEventListener("click", () => {
-        const assignedTo = Number(button.dataset.assignedToUserId);
+        return;
+      }
+      const member = event.target.closest?.("button.member");
+      if (member && !member.disabled) {
+        const assignedTo = Number(member.dataset.assignedToUserId);
         this._complete(
-          Number(button.dataset.taskId),
-          Number(button.dataset.userId),
+          Number(member.dataset.taskId),
+          Number(member.dataset.userId),
           Number.isInteger(assignedTo) && assignedTo > 0 ? assignedTo : null,
         );
-      });
+      }
     });
+  }
 
-    this.shadowRoot.querySelectorAll("button.create-member").forEach((button) => {
+  _openDialog() {
+    this._dialogOpen = true;
+    this._selectedCreateUserId = null;
+    this._draft = { title: "", description: "", due: "", frequencyType: "once", priority: "0" };
+    this._statusMessage = "";
+    this._formError = this._members().length
+      ? (this._configEntryId() ? "" : "Die Donetick-Konfigurations-ID fehlt. Bitte die Integration neu laden.")
+      : "Keine Donetick-Benutzer verfügbar. Bitte die Integration neu laden.";
+    this._render();
+    this.shadowRoot.querySelector('input[name="title"]')?.focus();
+  }
+
+  _placeholder(className, text) {
+    const element = document.createElement("div");
+    element.className = className;
+    element.textContent = text;
+    return element;
+  }
+
+  _createRow() {
+    const root = document.createElement("div");
+    root.className = "task";
+
+    const main = document.createElement("div");
+    main.className = "task-main";
+
+    const check = document.createElement("button");
+    check.className = "check";
+    check.type = "button";
+
+    const text = document.createElement("div");
+    text.className = "text";
+    const name = document.createElement("div");
+    name.className = "name";
+    const due = document.createElement("div");
+    due.className = "due";
+    text.append(name, due);
+    main.append(check, text);
+
+    const chooser = document.createElement("div");
+    chooser.className = "chooser";
+    chooser.setAttribute("role", "group");
+    chooser.setAttribute("aria-label", "Erledigt von");
+    chooser.hidden = true;
+    const chooserLabel = document.createElement("span");
+    chooserLabel.className = "chooser-label";
+    chooserLabel.textContent = "Erledigt von";
+    chooser.append(chooserLabel);
+
+    root.append(main, chooser);
+    return { root, check, name, due, chooser, checkKey: null, chooserKey: null };
+  }
+
+  _checkContent(busy, done, assignedInitial) {
+    if (busy) {
+      const spinner = document.createElement("span");
+      spinner.className = "spinner";
+      return spinner;
+    }
+    if (done) {
+      const icon = document.createElement("ha-icon");
+      icon.setAttribute("icon", "mdi:check-circle");
+      return icon;
+    }
+    if (assignedInitial) {
+      const initial = document.createElement("span");
+      initial.className = "assignee-initial";
+      initial.textContent = assignedInitial;
+      return initial;
+    }
+    const icon = document.createElement("ha-icon");
+    icon.setAttribute("icon", "mdi:checkbox-blank-circle-outline");
+    return icon;
+  }
+
+  _updateRow(row, task, taskId, members) {
+    const done = this._completedTasks.has(taskId);
+    const busy = this._busyTaskIds.has(taskId);
+    const expanded = this._expandedTaskId === taskId && !done;
+    const due = task.attributes.next_due_date;
+
+    const assignedToId = Number(task.attributes.assigned_to_user_id);
+    const assignedTo = Number.isInteger(assignedToId) && assignedToId > 0 ? assignedToId : null;
+    const assignedMember = members.find((member) => Number(member.user_id) === assignedToId);
+    const assignedInitial = assignedMember ? this._memberInitial(assignedMember, members) : null;
+
+    row.root.classList.toggle("expanded", expanded);
+    row.root.classList.toggle("done", done);
+
+    row.name.textContent = task.state;
+    row.due.textContent = done ? "Gebucht – warte auf Donetick …" : this._dueText(due);
+    row.due.classList.toggle("overdue", !done && this._isOverdue(due));
+
+    row.check.dataset.taskId = String(taskId);
+    row.check.disabled = busy || done;
+    row.check.title = done ? "Bereits gebucht" : "Erlediger auswählen";
+    row.check.setAttribute(
+      "aria-label",
+      done ? `${task.state} wurde gebucht` : `Erlediger für ${task.state} auswählen`,
+    );
+    row.check.setAttribute("aria-expanded", String(expanded));
+
+    const checkKey = busy ? "busy" : done ? "done" : assignedInitial ? `initial:${assignedInitial}` : "open";
+    if (row.checkKey !== checkKey) {
+      row.checkKey = checkKey;
+      row.check.replaceChildren(this._checkContent(busy, done, assignedInitial));
+    }
+
+    row.chooser.hidden = !expanded;
+    if (!expanded) {
+      row.chooserKey = null;
+      return;
+    }
+
+    const chooserKey = `${members.map((member) => `${member.user_id}:${member.display_name}`).join("|")}#${assignedTo}#${busy}`;
+    if (row.chooserKey === chooserKey) return;
+    row.chooserKey = chooserKey;
+
+    const buttons = members.map((member) => {
+      const button = document.createElement("button");
+      button.className = "member";
+      button.type = "button";
+      button.dataset.taskId = String(taskId);
+      button.dataset.userId = String(Number(member.user_id));
+      button.dataset.assignedToUserId = assignedTo == null ? "" : String(assignedTo);
+      button.title = member.display_name;
+      button.setAttribute("aria-label", `Erledigt von ${member.display_name}`);
+      button.disabled = busy;
+      button.textContent = this._memberInitial(member, members);
+      return button;
+    });
+    row.chooser.replaceChildren(row.chooser.firstElementChild, ...buttons);
+  }
+
+  _renderRows(tasks, members) {
+    const { list } = this._shell;
+
+    if (!tasks.length) {
+      this._rows.clear();
+      list.replaceChildren(this._placeholder("empty", "Keine offenen Aufgaben"));
+      return;
+    }
+
+    const seen = new Set();
+    const ordered = [];
+    for (const task of tasks) {
+      const taskId = Number(task.attributes.task_id);
+      seen.add(taskId);
+      let row = this._rows.get(taskId);
+      if (!row) {
+        row = this._createRow();
+        this._rows.set(taskId, row);
+      }
+      this._updateRow(row, task, taskId, members);
+      ordered.push(row.root);
+    }
+    for (const taskId of [...this._rows.keys()]) {
+      if (!seen.has(taskId)) this._rows.delete(taskId);
+    }
+
+    // Nur anfassen, wenn sich Bestand oder Reihenfolge geaendert haben. Ein
+    // Knoten aus dem DOM zu nehmen verliert den Fokus, auch wenn er direkt
+    // wieder eingehaengt wird.
+    const current = list.childNodes;
+    let changed = current.length !== ordered.length;
+    if (!changed) {
+      for (let index = 0; index < ordered.length; index += 1) {
+        if (current[index] !== ordered[index]) {
+          changed = true;
+          break;
+        }
+      }
+    }
+    if (changed) list.replaceChildren(...ordered);
+  }
+
+  _renderDialog(members) {
+    const { dialogHost } = this._shell;
+    if (!this._dialogOpen) {
+      if (dialogHost.firstChild) dialogHost.replaceChildren();
+      return;
+    }
+    dialogHost.innerHTML = this._dialogHtml(members);
+    this._bindDialogEvents();
+  }
+
+  _bindDialogEvents() {
+    const root = this._shell.dialogHost;
+
+    root.querySelectorAll("button.create-member").forEach((button) => {
       button.addEventListener("click", () => {
         this._selectedCreateUserId = Number(button.dataset.createUserId);
-        this.shadowRoot.querySelectorAll("button.create-member").forEach((candidate) => {
+        root.querySelectorAll("button.create-member").forEach((candidate) => {
           const selected = candidate === button;
           candidate.classList.toggle("selected", selected);
           candidate.setAttribute("aria-pressed", String(selected));
         });
         this._formError = "";
-        const error = this.shadowRoot.querySelector(".form-error");
-        if (error) error.remove();
+        root.querySelector(".form-error")?.remove();
       });
     });
 
-    this.shadowRoot.querySelector(".dialog-close")?.addEventListener("click", () => this._closeDialog());
-    this.shadowRoot.querySelector(".cancel")?.addEventListener("click", () => this._closeDialog());
-    const backdrop = this.shadowRoot.querySelector(".dialog-backdrop");
+    root.querySelector(".dialog-close")?.addEventListener("click", () => this._closeDialog());
+    root.querySelector(".cancel")?.addEventListener("click", () => this._closeDialog());
+
+    const backdrop = root.querySelector(".dialog-backdrop");
     backdrop?.addEventListener("click", (event) => {
       if (event.target === backdrop) this._closeDialog();
     });
@@ -441,7 +770,7 @@ class DonetickChoresCard extends HTMLElement {
       if (event.key === "Escape") this._closeDialog();
     });
 
-    this.shadowRoot.querySelector(".create-form")?.addEventListener("submit", (event) => {
+    root.querySelector(".create-form")?.addEventListener("submit", (event) => {
       event.preventDefault();
       const form = event.currentTarget;
       this._createTask({
@@ -457,138 +786,29 @@ class DonetickChoresCard extends HTMLElement {
 
   _render() {
     if (!this.shadowRoot || !this._config) return;
+    this._ensureShell();
+
+    const { title, count, status, list } = this._shell;
+    title.textContent = this._config.title;
+
     if (!this._hass) {
-      this.shadowRoot.innerHTML = `<ha-card><div class="loading">Lade Aufgaben …</div></ha-card>`;
+      count.textContent = "";
+      this._rows.clear();
+      list.replaceChildren(this._placeholder("loading", "Lade Aufgaben …"));
       return;
     }
 
     const tasks = this._tasks();
     const members = this._members();
     this._pruneCompleted(tasks);
-    const rows = tasks.map((task) => {
-      const taskId = Number(task.attributes.task_id);
-      const assignedToId = Number(task.attributes.assigned_to_user_id);
-      const assignedTo = Number.isInteger(assignedToId) && assignedToId > 0
-        ? assignedToId
-        : null;
-      const assignedMember = members.find((member) => Number(member.user_id) === assignedToId);
-      const assignedInitial = assignedMember ? this._memberInitial(assignedMember, members) : null;
-      const done = this._completedTasks.has(taskId);
-      const expanded = this._expandedTaskId === taskId && !done;
-      const busy = this._busyTaskIds.has(taskId);
-      const checkContent = busy
-        ? '<span class="spinner"></span>'
-        : done
-          ? '<ha-icon icon="mdi:check-circle"></ha-icon>'
-          : assignedInitial
-            ? `<span class="assignee-initial">${this._escape(assignedInitial)}</span>`
-            : '<ha-icon icon="mdi:checkbox-blank-circle-outline"></ha-icon>';
-      const due = task.attributes.next_due_date;
-      const chooser = expanded ? `
-        <div class="chooser" aria-label="Erledigt von">
-          <span class="chooser-label">Erledigt von</span>
-          ${members.map((member) => `
-            <button class="member" type="button"
-              data-task-id="${taskId}" data-user-id="${Number(member.user_id)}" data-assigned-to-user-id="${assignedTo ?? ""}"
-              title="${this._escape(member.display_name)}" aria-label="Erledigt von ${this._escape(member.display_name)}"
-              ${busy ? "disabled" : ""}>${this._escape(this._memberInitial(member, members))}</button>
-          `).join("")}
-        </div>` : "";
-      return `
-        <div class="task ${expanded ? "expanded" : ""} ${done ? "done" : ""}">
-          <div class="task-main">
-            <button class="check" type="button" data-task-id="${taskId}"
-              title="${done ? "Bereits gebucht" : "Erlediger auswählen"}"
-              aria-label="${done ? `${this._escape(task.state)} wurde gebucht` : `Erlediger für ${this._escape(task.state)} auswählen`}"
-              aria-expanded="${expanded}"
-              ${busy || done ? "disabled" : ""}>
-              ${checkContent}
-            </button>
-            <div class="text">
-              <div class="name">${this._escape(task.state)}</div>
-              <div class="due ${!done && this._isOverdue(due) ? "overdue" : ""}">${
-                done ? "Gebucht – warte auf Donetick …" : this._escape(this._dueText(due))
-              }</div>
-            </div>
-          </div>
-          ${chooser}
-        </div>`;
-    }).join("");
 
-    this.shadowRoot.innerHTML = `
-      <style>
-        :host { display: block; }
-        ha-card { overflow: hidden; }
-        .header { padding: 14px 14px 10px 20px; display: flex; align-items: center; gap: 12px; }
-        .title { flex: 1; font-size: 1.25rem; font-weight: 600; color: var(--primary-text-color); }
-        .count { font-size: .82rem; color: var(--secondary-text-color); }
-        .add { width: 40px; height: 40px; border: 0; border-radius: 50%; background: transparent; color: var(--primary-color); cursor: pointer; display: grid; place-items: center; }
-        .add:hover { background: color-mix(in srgb, var(--primary-color) 12%, transparent); }
-        .add ha-icon { --mdc-icon-size: 25px; }
-        .list { padding: 0 10px 10px; }
-        .task { border-top: 1px solid var(--divider-color); padding: 8px 4px; transition: background .15s ease; }
-        .task:first-child { border-top: 0; }
-        .task.expanded { background: color-mix(in srgb, var(--primary-color) 6%, transparent); border-radius: 12px; }
-        .task-main { min-height: 48px; display: flex; align-items: center; }
-        button { font: inherit; }
-        .check { width: 44px; height: 44px; flex: 0 0 44px; border: 0; border-radius: 50%; background: transparent; color: var(--primary-color); cursor: pointer; display: grid; place-items: center; }
-        .check:hover { background: color-mix(in srgb, var(--primary-color) 12%, transparent); }
-        .check ha-icon { --mdc-icon-size: 27px; }
-        .assignee-initial { width: 28px; height: 28px; display: grid; place-items: center; border: 2px solid currentColor; border-radius: 50%; font-size: .72rem; line-height: 1; font-weight: 700; }
-        .text { min-width: 0; padding: 3px 8px 3px 2px; }
-        .name { color: var(--primary-text-color); font-size: .98rem; line-height: 1.3; overflow-wrap: anywhere; }
-        .due { color: var(--secondary-text-color); font-size: .78rem; margin-top: 2px; }
-        .due.overdue { color: var(--error-color); }
-        .task.done .name { text-decoration: line-through; opacity: .55; }
-        .task.done .due { font-style: italic; }
-        .task.done .check { color: var(--success-color, #43a047); cursor: default; }
-        .chooser { display: flex; align-items: center; gap: 9px; padding: 4px 8px 8px 50px; }
-        .chooser-label { color: var(--secondary-text-color); font-size: .78rem; margin-right: 2px; }
-        .member { width: 34px; height: 34px; border: 1px solid color-mix(in srgb, var(--primary-color) 50%, var(--divider-color)); border-radius: 50%; background: color-mix(in srgb, var(--primary-color) 12%, var(--card-background-color)); color: var(--primary-color); font-weight: 700; cursor: pointer; box-shadow: none; }
-        .member:hover { background: var(--primary-color); color: var(--text-primary-color); transform: translateY(-1px); }
-        button:disabled { opacity: .55; cursor: wait; }
-        .empty, .loading { padding: 20px; color: var(--secondary-text-color); }
-        .spinner { width: 19px; height: 19px; border: 2px solid var(--divider-color); border-top-color: var(--primary-color); border-radius: 50%; animation: spin .8s linear infinite; }
-        .dialog-backdrop { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .48); }
-        .dialog { box-sizing: border-box; width: min(460px, 100%); max-height: calc(100vh - 32px); overflow: auto; border-radius: 18px; background: var(--card-background-color); color: var(--primary-text-color); box-shadow: 0 16px 50px rgba(0, 0, 0, .35); }
-        .dialog-header { display: flex; align-items: center; padding: 18px 20px 8px; }
-        .dialog-header h2 { flex: 1; margin: 0; font-size: 1.25rem; }
-        .dialog-close { width: 40px; height: 40px; border: 0; border-radius: 50%; background: transparent; color: var(--secondary-text-color); font-size: 1.7rem; cursor: pointer; }
-        .create-form { display: grid; gap: 15px; padding: 10px 20px 20px; }
-        .create-form label { display: grid; gap: 6px; color: var(--secondary-text-color); font-size: .85rem; }
-        .create-form input, .create-form textarea, .create-form select { box-sizing: border-box; width: 100%; border: 1px solid var(--divider-color); border-radius: 10px; padding: 11px 12px; background: var(--card-background-color); color: var(--primary-text-color); font: inherit; }
-        .create-form input:focus, .create-form textarea:focus, .create-form select:focus { outline: 2px solid var(--primary-color); outline-offset: 1px; }
-        .create-form fieldset { margin: 0; padding: 0; border: 0; }
-        .create-form legend { margin-bottom: 8px; color: var(--secondary-text-color); font-size: .85rem; }
-        .create-members { display: flex; flex-wrap: wrap; gap: 9px; }
-        .create-member { min-width: 38px; height: 38px; padding: 0 10px; border: 1px solid color-mix(in srgb, var(--primary-color) 50%, var(--divider-color)); border-radius: 19px; background: color-mix(in srgb, var(--primary-color) 10%, var(--card-background-color)); color: var(--primary-color); font-weight: 700; cursor: pointer; }
-        .create-member.selected { background: var(--primary-color); color: var(--text-primary-color); }
-        .form-error { border-radius: 10px; padding: 10px 12px; background: color-mix(in srgb, var(--error-color) 12%, transparent); color: var(--error-color); font-size: .85rem; }
-        .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 2px; }
-        .dialog-actions button { min-height: 40px; border: 0; border-radius: 10px; padding: 0 16px; cursor: pointer; }
-        .cancel { background: transparent; color: var(--primary-text-color); }
-        .save { background: var(--primary-color); color: var(--text-primary-color); font-weight: 600; }
-        .status { margin: 0 14px 10px; border-radius: 10px; padding: 9px 12px; background: color-mix(in srgb, var(--success-color, #43a047) 12%, transparent); color: var(--primary-text-color); font-size: .84rem; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @media (max-width: 420px) {
-          .header { padding-inline: 16px; }
-          .chooser { padding-left: 46px; }
-          .chooser-label { display: none; }
-        }
-      </style>
-      <ha-card>
-        <div class="header">
-          <div class="title">${this._escape(this._config.title)}</div>
-          <div class="count">${tasks.length - this._completedTasks.size} offen</div>
-          <button class="add" type="button" title="Aufgabe hinzufügen" aria-label="Aufgabe hinzufügen">
-            <ha-icon icon="mdi:plus"></ha-icon>
-          </button>
-        </div>
-        ${this._statusMessage ? `<div class="status" role="status">${this._escape(this._statusMessage)}</div>` : ""}
-        <div class="list">${rows || '<div class="empty">Keine offenen Aufgaben</div>'}</div>
-        ${this._dialogHtml(members)}
-      </ha-card>`;
-    this._bindEvents();
+    count.textContent = `${tasks.length - this._completedTasks.size} offen`;
+
+    status.textContent = this._statusMessage;
+    status.hidden = !this._statusMessage;
+
+    this._renderRows(tasks, members);
+    this._renderDialog(members);
   }
 }
 
