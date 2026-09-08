@@ -61,8 +61,17 @@ class DonetickChoresCard extends HTMLElement {
     return previousCount !== nextCount;
   }
 
+  // Masonry-Layout: Hoeheneinheiten a ~50 px. Kopfzeile plus eine Zeile je
+  // Aufgabe kommt der tatsaechlichen Hoehe deutlich naeher als eine Konstante.
   getCardSize() {
-    return 4;
+    return 1 + this._tasks().length;
+  }
+
+  // Sections-Layout (HA 2024.11+): dort steuert getGridOptions die Groesse,
+  // getCardSize wird gar nicht mehr ausgewertet. Ohne diese Methode bekommt die
+  // Karte die Default-Kachelgroesse, unabhaengig von der Anzahl der Aufgaben.
+  getGridOptions() {
+    return { rows: "auto", columns: "full", min_columns: 6 };
   }
 
   static getStubConfig() {
