@@ -170,6 +170,20 @@ class DonetickChoresCard extends HTMLElement {
     return `Fällig ${new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit" }).format(due)}`;
   }
 
+  // HA hoert global auf "hass-notification" und zeigt die Nachricht als Toast.
+  // Ein einfaches Event hat kein detail-Feld - das nachtraeglich als Property
+  // anzuhaengen funktioniert in JS zwar, ist aber nicht die Event-Semantik und
+  // bricht, sobald jemand das Event klont oder weiterreicht.
+  _notify(message) {
+    this.dispatchEvent(
+      new CustomEvent("hass-notification", {
+        detail: { message },
+        bubbles: true,
+        composed: true,
+      })
+    );
+  }
+
   _isOverdue(value) {
     return Boolean(value) && new Date(value).getTime() < Date.now();
   }
@@ -291,6 +305,7 @@ class DonetickChoresCard extends HTMLElement {
       this._statusMessage = "Aufgabe wurde hinzugefügt.";
     } catch (error) {
       this._formError = `Aufgabe konnte nicht hinzugefügt werden: ${error?.message || error}`;
+      this._notify(this._formError);
     } finally {
       this._busyCreate = false;
       this._render();
@@ -340,9 +355,7 @@ class DonetickChoresCard extends HTMLElement {
         : `„${taskName}" wurde als erledigt gebucht.`;
     } catch (error) {
       this._statusMessage = `Aufgabe konnte nicht abgeschlossen werden: ${error?.message || error}`;
-      const event = new Event("hass-notification", { bubbles: true, composed: true });
-      event.detail = { message: this._statusMessage };
-      this.dispatchEvent(event);
+      this._notify(this._statusMessage);
     } finally {
       this._busyTaskIds.delete(Number(taskId));
       this._render();
