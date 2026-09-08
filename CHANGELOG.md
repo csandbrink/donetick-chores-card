@@ -3,6 +3,25 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.1.1] – 2026-09-08
+
+### Fixed
+
+- **The status bar was permanently visible and empty.** Giving `.status`
+  `display: flex` beat the `hidden` attribute, which only carries
+  `display: none` from the browser stylesheet, so an empty green box sat above
+  the list at all times. Every class the card hides now has a `[hidden]`
+  override, and a test checks all of them.
+
+### Changed
+
+- **The member circles are back to their original size.** Growing them to fill
+  a 44 px tap target made a row of five look clumsy. The circles are 36 px as
+  before; the 44 px tap target comes from a transparent pseudo-element that
+  overhangs them.
+- Documentation, code comments and test names are now in English. The card's
+  own interface stays German.
+
 ## [1.1.0] – 2026-09-08
 
 A full pass over the card following a code review. **The card's configuration
