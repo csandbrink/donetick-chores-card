@@ -10,6 +10,7 @@ class DonetickChoresCard extends HTMLElement {
     this._formError = "";
     this._statusMessage = "";
     this._draft = { title: "", description: "", due: "", frequencyType: "once", priority: "0" };
+    this._completedTasks = new Map();
     this._lastDataSignature = null;
     this._renderPending = false;
   }
@@ -269,6 +270,7 @@ class DonetickChoresCard extends HTMLElement {
 
   async _complete(taskId, userId, assignedTo = null) {
     if (this._busyTaskId != null) return;
+    if (this._completedTasks.has(Number(taskId))) return;
     const configEntryId = this._configEntryId();
     const memberExists = this._members().some((member) => Number(member.user_id) === Number(userId));
     const assignedToId = Number(assignedTo);
@@ -282,6 +284,10 @@ class DonetickChoresCard extends HTMLElement {
       this._render();
       return;
     }
+    const task = this._tasks().find((candidate) => Number(candidate.attributes.task_id) === Number(taskId));
+    const dueAtCompletion = task?.attributes?.next_due_date ?? null;
+    const taskName = task?.state ?? "Aufgabe";
+    const member = this._members().find((candidate) => Number(candidate.user_id) === Number(userId));
     this._statusMessage = "";
     this._busyTaskId = taskId;
     this._render();
@@ -296,6 +302,13 @@ class DonetickChoresCard extends HTMLElement {
       }
       await this._hass.callService("donetick", "complete_chore", data);
       this._expandedTaskId = null;
+      // Der Coordinator aktualisiert den Sensor erst mit Verzoegerung. Bis dahin
+      // die Zeile lokal als erledigt fuehren, sonst sieht der Nutzer keine
+      // Reaktion und bucht die Aufgabe ein zweites Mal.
+      this._completedTasks.set(Number(taskId), { dueAtCompletion, at: Date.now() });
+      this._statusMessage = member
+        ? `„${taskName}" – erledigt von ${member.display_name}.`
+        : `„${taskName}" wurde als erledigt gebucht.`;
     } catch (error) {
       this._statusMessage = `Aufgabe konnte nicht abgeschlossen werden: ${error?.message || error}`;
       const event = new Event("hass-notification", { bubbles: true, composed: true });
@@ -304,6 +317,21 @@ class DonetickChoresCard extends HTMLElement {
     } finally {
       this._busyTaskId = null;
       this._render();
+    }
+  }
+
+  _pruneCompleted(tasks) {
+    if (!this._completedTasks.size) return;
+    const byId = new Map(tasks.map((task) => [Number(task.attributes.task_id), task]));
+    for (const [taskId, entry] of this._completedTasks) {
+      const task = byId.get(taskId);
+      // Sensor ist verschwunden (Einmalaufgabe) oder hat einen neuen Termin
+      // (Wiederholung) -> Donetick hat die Buchung verarbeitet.
+      const settled =
+        !task ||
+        (task.attributes.next_due_date ?? null) !== entry.dueAtCompletion ||
+        Date.now() - entry.at > 120000;
+      if (settled) this._completedTasks.delete(taskId);
     }
   }
 
@@ -394,6 +422,7 @@ class DonetickChoresCard extends HTMLElement {
 
     const tasks = this._tasks();
     const members = this._members();
+    this._pruneCompleted(tasks);
     const rows = tasks.map((task) => {
       const taskId = Number(task.attributes.task_id);
       const assignedToId = Number(task.attributes.assigned_to_user_id);
@@ -402,13 +431,16 @@ class DonetickChoresCard extends HTMLElement {
         : null;
       const assignedMember = members.find((member) => Number(member.user_id) === assignedToId);
       const assignedInitial = assignedMember ? this._memberInitial(assignedMember, members) : null;
-      const expanded = this._expandedTaskId === taskId;
+      const done = this._completedTasks.has(taskId);
+      const expanded = this._expandedTaskId === taskId && !done;
       const busy = this._busyTaskId === taskId;
       const checkContent = busy
         ? '<span class="spinner"></span>'
-        : assignedInitial
-          ? `<span class="assignee-initial">${this._escape(assignedInitial)}</span>`
-          : '<ha-icon icon="mdi:checkbox-blank-circle-outline"></ha-icon>';
+        : done
+          ? '<ha-icon icon="mdi:check-circle"></ha-icon>'
+          : assignedInitial
+            ? `<span class="assignee-initial">${this._escape(assignedInitial)}</span>`
+            : '<ha-icon icon="mdi:checkbox-blank-circle-outline"></ha-icon>';
       const due = task.attributes.next_due_date;
       const chooser = expanded ? `
         <div class="chooser" aria-label="Erledigt von">
@@ -421,16 +453,20 @@ class DonetickChoresCard extends HTMLElement {
           `).join("")}
         </div>` : "";
       return `
-        <div class="task ${expanded ? "expanded" : ""}">
+        <div class="task ${expanded ? "expanded" : ""} ${done ? "done" : ""}">
           <div class="task-main">
             <button class="check" type="button" data-task-id="${taskId}"
-              title="Erlediger auswählen" aria-label="Erlediger für ${this._escape(task.state)} auswählen"
-              ${busy ? "disabled" : ""}>
+              title="${done ? "Bereits gebucht" : "Erlediger auswählen"}"
+              aria-label="${done ? `${this._escape(task.state)} wurde gebucht` : `Erlediger für ${this._escape(task.state)} auswählen`}"
+              aria-expanded="${expanded}"
+              ${busy || done ? "disabled" : ""}>
               ${checkContent}
             </button>
             <div class="text">
               <div class="name">${this._escape(task.state)}</div>
-              <div class="due ${this._isOverdue(due) ? "overdue" : ""}">${this._escape(this._dueText(due))}</div>
+              <div class="due ${!done && this._isOverdue(due) ? "overdue" : ""}">${
+                done ? "Gebucht – warte auf Donetick …" : this._escape(this._dueText(due))
+              }</div>
             </div>
           </div>
           ${chooser}
@@ -461,6 +497,9 @@ class DonetickChoresCard extends HTMLElement {
         .name { color: var(--primary-text-color); font-size: .98rem; line-height: 1.3; overflow-wrap: anywhere; }
         .due { color: var(--secondary-text-color); font-size: .78rem; margin-top: 2px; }
         .due.overdue { color: var(--error-color); }
+        .task.done .name { text-decoration: line-through; opacity: .55; }
+        .task.done .due { font-style: italic; }
+        .task.done .check { color: var(--success-color, #43a047); cursor: default; }
         .chooser { display: flex; align-items: center; gap: 9px; padding: 4px 8px 8px 50px; }
         .chooser-label { color: var(--secondary-text-color); font-size: .78rem; margin-right: 2px; }
         .member { width: 34px; height: 34px; border: 1px solid color-mix(in srgb, var(--primary-color) 50%, var(--divider-color)); border-radius: 50%; background: color-mix(in srgb, var(--primary-color) 12%, var(--card-background-color)); color: var(--primary-color); font-weight: 700; cursor: pointer; box-shadow: none; }
@@ -498,7 +537,7 @@ class DonetickChoresCard extends HTMLElement {
       <ha-card>
         <div class="header">
           <div class="title">${this._escape(this._config.title)}</div>
-          <div class="count">${tasks.length} offen</div>
+          <div class="count">${tasks.length - this._completedTasks.size} offen</div>
           <button class="add" type="button" title="Aufgabe hinzufügen" aria-label="Aufgabe hinzufügen">
             <ha-icon icon="mdi:plus"></ha-icon>
           </button>
