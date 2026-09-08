@@ -92,6 +92,14 @@ function sharedStyleSheet() {
   return cachedStyleSheet;
 }
 
+// <label>Text<control></label> - die Beschriftung umschliesst das Feld, damit
+// kein for/id-Paar noetig ist, das im Shadow-Root ohnehin nur lokal gilt.
+function labelled(caption, control) {
+  const label = document.createElement("label");
+  label.append(caption, control);
+  return label;
+}
+
 class DonetickChoresCard extends HTMLElement {
   constructor() {
     super();
@@ -105,6 +113,8 @@ class DonetickChoresCard extends HTMLElement {
     this._statusMessage = "";
     this._draft = { title: "", description: "", due: "", frequencyType: "once", priority: "0" };
     this._completedTasks = new Map();
+    this._dialog = null;
+    this._focusBeforeDialog = null;
   }
 
   setConfig(config) {
@@ -211,15 +221,6 @@ class DonetickChoresCard extends HTMLElement {
     return this._hass?.states?.[this._config?.todo_entity]?.attributes?.config_entry_id;
   }
 
-  _escape(value) {
-    return String(value ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
-
   _initial(name) {
     return String(name || "?").trim().charAt(0).toLocaleUpperCase("de");
   }
@@ -267,54 +268,6 @@ class DonetickChoresCard extends HTMLElement {
 
   _isOverdue(value) {
     return Boolean(value) && new Date(value).getTime() < Date.now();
-  }
-
-  _dialogHtml(members) {
-    if (!this._dialogOpen) return "";
-    return `
-      <div class="dialog-backdrop" role="presentation">
-        <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="new-task-title">
-          <div class="dialog-header">
-            <h2 id="new-task-title">Neue Aufgabe</h2>
-            <button class="dialog-close" type="button" aria-label="Dialog schließen">×</button>
-          </div>
-          <form class="create-form">
-            <label>Titel<input name="title" type="text" maxlength="255" required autofocus value="${this._escape(this._draft.title)}"></label>
-            <label>Beschreibung<textarea name="description" rows="3">${this._escape(this._draft.description)}</textarea></label>
-            <label>Fällig am<input name="due" type="datetime-local" value="${this._escape(this._draft.due)}"></label>
-            <label>Wiederholung
-              <select name="frequencyType">
-                ${FREQUENCY_TYPES.map((entry) => `<option value="${entry.value}" ${
-                  this._draft.frequencyType === entry.value ? "selected" : ""
-                }>${entry.label}</option>`).join("")}
-              </select>
-            </label>
-            <label>Priorität
-              <select name="priority">
-                ${[0, 1, 2, 3, 4, 5].map((priority) => `<option value="${priority}" ${Number(this._draft.priority) === priority ? "selected" : ""}>${priority}</option>`).join("")}
-              </select>
-            </label>
-            <fieldset>
-              <legend>Zuständig</legend>
-              <div class="create-members">
-                ${members.map((member) => `
-                  <button class="create-member${Number(member.user_id) === Number(this._selectedCreateUserId) ? " selected" : ""}"
-                    type="button" data-create-user-id="${Number(member.user_id)}"
-                    title="${this._escape(member.display_name)}" aria-label="${this._escape(member.display_name)} auswählen">
-                    ${this._escape(this._memberInitial(member, members))}
-                  </button>`).join("")}
-              </div>
-            </fieldset>
-            ${this._formError ? `<div class="form-error" role="alert">${this._escape(this._formError)}</div>` : ""}
-            <div class="dialog-actions">
-              <button class="cancel" type="button">Abbrechen</button>
-              <button class="save" type="submit" ${this._busyCreate ? "disabled" : ""}>
-                ${this._busyCreate ? "Speichert …" : "Speichern"}
-              </button>
-            </div>
-          </form>
-        </section>
-      </div>`;
   }
 
   async _createTask({ title, description, due, userId, frequencyType = "once", priority = 0 }) {
@@ -558,6 +511,8 @@ class DonetickChoresCard extends HTMLElement {
   }
 
   _openDialog() {
+    // Fuer die Rueckgabe des Fokus beim Schliessen.
+    this._focusBeforeDialog = this.shadowRoot.activeElement || this._shell.add;
     this._dialogOpen = true;
     this._selectedCreateUserId = null;
     this._draft = { title: "", description: "", due: "", frequencyType: "once", priority: "0" };
@@ -566,7 +521,7 @@ class DonetickChoresCard extends HTMLElement {
       ? (this._configEntryId() ? "" : "Die Donetick-Konfigurations-ID fehlt. Bitte die Integration neu laden.")
       : "Keine Donetick-Benutzer verfügbar. Bitte die Integration neu laden.";
     this._render();
-    this.shadowRoot.querySelector('input[name="title"]')?.focus();
+    this._dialog?.title.focus();
   }
 
   _placeholder(className, text) {
@@ -733,55 +688,217 @@ class DonetickChoresCard extends HTMLElement {
     if (changed) list.replaceChildren(...ordered);
   }
 
-  _renderDialog(members) {
-    const { dialogHost } = this._shell;
-    if (!this._dialogOpen) {
-      if (dialogHost.firstChild) dialogHost.replaceChildren();
-      return;
+  _createDialog() {
+    const backdrop = document.createElement("div");
+    backdrop.className = "dialog-backdrop";
+    backdrop.setAttribute("role", "presentation");
+
+    const section = document.createElement("section");
+    section.className = "dialog";
+    section.setAttribute("role", "dialog");
+    section.setAttribute("aria-modal", "true");
+    section.setAttribute("aria-labelledby", "new-task-title");
+
+    const header = document.createElement("div");
+    header.className = "dialog-header";
+    const heading = document.createElement("h2");
+    heading.id = "new-task-title";
+    heading.textContent = "Neue Aufgabe";
+    const close = document.createElement("button");
+    close.className = "dialog-close";
+    close.type = "button";
+    close.setAttribute("aria-label", "Dialog schließen");
+    close.textContent = "×";
+    header.append(heading, close);
+
+    const form = document.createElement("form");
+    form.className = "create-form";
+
+    const title = document.createElement("input");
+    title.name = "title";
+    title.type = "text";
+    title.maxLength = 255;
+    title.required = true;
+
+    const description = document.createElement("textarea");
+    description.name = "description";
+    description.rows = 3;
+
+    const due = document.createElement("input");
+    due.name = "due";
+    due.type = "datetime-local";
+
+    const frequencyType = document.createElement("select");
+    frequencyType.name = "frequencyType";
+    for (const entry of FREQUENCY_TYPES) {
+      const option = document.createElement("option");
+      option.value = entry.value;
+      option.textContent = entry.label;
+      frequencyType.append(option);
     }
-    dialogHost.innerHTML = this._dialogHtml(members);
-    this._bindDialogEvents();
-  }
 
-  _bindDialogEvents() {
-    const root = this._shell.dialogHost;
+    const priority = document.createElement("select");
+    priority.name = "priority";
+    for (const value of [0, 1, 2, 3, 4, 5]) {
+      const option = document.createElement("option");
+      option.value = String(value);
+      option.textContent = String(value);
+      priority.append(option);
+    }
 
-    root.querySelectorAll("button.create-member").forEach((button) => {
-      button.addEventListener("click", () => {
-        this._selectedCreateUserId = Number(button.dataset.createUserId);
-        root.querySelectorAll("button.create-member").forEach((candidate) => {
-          const selected = candidate === button;
-          candidate.classList.toggle("selected", selected);
-          candidate.setAttribute("aria-pressed", String(selected));
-        });
-        this._formError = "";
-        root.querySelector(".form-error")?.remove();
-      });
-    });
+    const fieldset = document.createElement("fieldset");
+    const legend = document.createElement("legend");
+    legend.textContent = "Zuständig";
+    const memberBox = document.createElement("div");
+    memberBox.className = "create-members";
+    fieldset.append(legend, memberBox);
 
-    root.querySelector(".dialog-close")?.addEventListener("click", () => this._closeDialog());
-    root.querySelector(".cancel")?.addEventListener("click", () => this._closeDialog());
+    const formError = document.createElement("div");
+    formError.className = "form-error";
+    formError.setAttribute("role", "alert");
+    formError.hidden = true;
 
-    const backdrop = root.querySelector(".dialog-backdrop");
-    backdrop?.addEventListener("click", (event) => {
+    const actions = document.createElement("div");
+    actions.className = "dialog-actions";
+    const cancel = document.createElement("button");
+    cancel.className = "cancel";
+    cancel.type = "button";
+    cancel.textContent = "Abbrechen";
+    const save = document.createElement("button");
+    save.className = "save";
+    save.type = "submit";
+    save.textContent = "Speichern";
+    actions.append(cancel, save);
+
+    form.append(
+      labelled("Titel", title),
+      labelled("Beschreibung", description),
+      labelled("Fällig am", due),
+      labelled("Wiederholung", frequencyType),
+      labelled("Priorität", priority),
+      fieldset,
+      formError,
+      actions,
+    );
+    section.append(header, form);
+    backdrop.append(section);
+
+    close.addEventListener("click", () => this._closeDialog());
+    cancel.addEventListener("click", () => this._closeDialog());
+    backdrop.addEventListener("click", (event) => {
       if (event.target === backdrop) this._closeDialog();
     });
-    backdrop?.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") this._closeDialog();
+    backdrop.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        this._closeDialog();
+        return;
+      }
+      if (event.key === "Tab") this._trapFocus(event, section);
     });
 
-    root.querySelector(".create-form")?.addEventListener("submit", (event) => {
+    memberBox.addEventListener("click", (event) => {
+      const button = event.target.closest?.("button.create-member");
+      if (!button) return;
+      this._selectedCreateUserId = Number(button.dataset.createUserId);
+      for (const candidate of memberBox.querySelectorAll("button.create-member")) {
+        const selected = candidate === button;
+        candidate.classList.toggle("selected", selected);
+        candidate.setAttribute("aria-pressed", String(selected));
+      }
+      this._formError = "";
+      formError.textContent = "";
+      formError.hidden = true;
+    });
+
+    form.addEventListener("submit", (event) => {
       event.preventDefault();
-      const form = event.currentTarget;
       this._createTask({
-        title: form.elements.namedItem("title")?.value,
-        description: form.elements.namedItem("description")?.value,
-        due: form.elements.namedItem("due")?.value,
+        title: title.value,
+        description: description.value,
+        due: due.value,
         userId: this._selectedCreateUserId,
-        frequencyType: form.elements.namedItem("frequencyType")?.value,
-        priority: form.elements.namedItem("priority")?.value,
+        frequencyType: frequencyType.value,
+        priority: priority.value,
       });
     });
+
+    return {
+      backdrop, section, title, description, due, frequencyType, priority,
+      memberBox, formError, save, memberKey: null,
+    };
+  }
+
+  // aria-modal="true" behauptet, der Rest der Seite sei nicht erreichbar. Ohne
+  // Fokus-Trap stimmt das nicht: Tab laeuft weiter ins Dashboard darunter.
+  _trapFocus(event, section) {
+    const focusable = [...section.querySelectorAll(
+      "button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled])",
+    )];
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = this.shadowRoot.activeElement;
+    if (event.shiftKey && active === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  _updateDialog(members) {
+    const dialog = this._dialog;
+
+    const memberKey = members.map((member) => `${member.user_id}:${member.display_name}`).join("|");
+    if (dialog.memberKey !== memberKey) {
+      dialog.memberKey = memberKey;
+      dialog.memberBox.replaceChildren(...members.map((member) => {
+        const button = document.createElement("button");
+        button.className = "create-member";
+        button.type = "button";
+        button.dataset.createUserId = String(Number(member.user_id));
+        button.title = member.display_name;
+        button.setAttribute("aria-label", `${member.display_name} auswählen`);
+        button.textContent = this._memberInitial(member, members);
+        return button;
+      }));
+    }
+    for (const button of dialog.memberBox.querySelectorAll("button.create-member")) {
+      const selected = Number(button.dataset.createUserId) === Number(this._selectedCreateUserId);
+      button.classList.toggle("selected", selected);
+      // aria-pressed stand bisher erst nach dem ersten Klick im Markup.
+      button.setAttribute("aria-pressed", String(selected));
+    }
+
+    dialog.formError.textContent = this._formError;
+    dialog.formError.hidden = !this._formError;
+
+    dialog.save.disabled = this._busyCreate;
+    dialog.save.textContent = this._busyCreate ? "Speichert …" : "Speichern";
+  }
+
+  _renderDialog(members) {
+    const { dialogHost } = this._shell;
+
+    if (!this._dialogOpen) {
+      if (!this._dialog) return;
+      this._dialog = null;
+      dialogHost.replaceChildren();
+      // Fokus dorthin zurueck, wo er vor dem Oeffnen war.
+      const target = this._focusBeforeDialog || this._shell.add;
+      this._focusBeforeDialog = null;
+      target?.focus?.();
+      return;
+    }
+
+    // Der Dialog wird nur beim Oeffnen gebaut, nie waehrend er offen ist -
+    // sonst verliert der Nutzer bei jedem Update seine Eingaben.
+    if (!this._dialog) {
+      this._dialog = this._createDialog();
+      dialogHost.replaceChildren(this._dialog.backdrop);
+    }
+    this._updateDialog(members);
   }
 
   _render() {

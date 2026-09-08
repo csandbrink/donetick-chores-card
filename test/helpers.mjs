@@ -107,6 +107,13 @@ export function withStates(hass, replacements) {
   return { ...hass, states };
 }
 
+/**
+ * Objekte, die im jsdom-Kontext entstanden sind, tragen dessen Prototypen.
+ * assert.deepStrictEqual vergleicht Prototypen mit und schlaegt dann fehl,
+ * obwohl der Inhalt stimmt. Dieser Klartext-Abzug umgeht das.
+ */
+export const plain = (value) => JSON.parse(JSON.stringify(value));
+
 export const sr = (card) => card.shadowRoot;
 export const rows = (card) => [...card.shadowRoot.querySelectorAll(".task")];
 export const text = (element) => (element ? element.textContent.trim() : null);
