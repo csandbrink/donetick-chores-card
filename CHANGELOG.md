@@ -3,6 +3,17 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.1.2] – 2026-09-08
+
+### Changed
+
+- **The "Erledigt von" row now lines up with the circle above it** instead of
+  with the task name. It was indented 50 px, which put the label out in the
+  middle of the row with nothing above it. It sits at 8 px now — the check
+  button is 44 px wide but the circle drawn inside it is 27 px and centred, so
+  the circle itself starts 8.5 px in. A test ties the indent to that
+  measurement so the two cannot drift apart.
+
 ## [1.1.1] – 2026-09-08
 
 ### Fixed

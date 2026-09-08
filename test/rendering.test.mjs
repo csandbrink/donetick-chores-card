@@ -255,6 +255,38 @@ describe("Stylesheet rules", () => {
     assert.match(ruleFor(text, ".create-member"), /height:\s*38px/);
   });
 
+  test("the chooser row lines up with the circle above it, not the task name", () => {
+    const text = css();
+    const check = ruleFor(text, ".check");
+    const chooser = ruleFor(text, ".chooser");
+    const iconRule = text.split("\n").find((line) => line.trimStart().startsWith(".check ha-icon {"));
+
+    const buttonWidth = Number(/width:\s*(\d+)px/.exec(check)[1]);
+    const iconSize = Number(/--mdc-icon-size:\s*(\d+)px/.exec(iconRule)[1]);
+    // The button is wider than the circle drawn inside it, and that circle is
+    // centred - so the circle starts half the difference in.
+    const circleStartsAt = (buttonWidth - iconSize) / 2;
+
+    const padding = /padding:\s*([^;]+);/.exec(chooser)[1].trim().split(/\s+/);
+    assert.equal(padding.length, 4, "four-value padding shorthand");
+    const indent = Number(padding[3].replace("px", ""));
+
+    assert.ok(
+      Math.abs(indent - circleStartsAt) <= 1,
+      `chooser is indented ${indent}px but the circle starts at ${circleStartsAt}px`,
+    );
+  });
+
+  test("the narrow-screen rules do not reintroduce an indent", () => {
+    const text = css();
+    const media = text.slice(text.indexOf("@media (max-width: 420px)"));
+    assert.equal(
+      /\.chooser\s*{[^}]*padding/.test(media),
+      false,
+      "a padding override here would undo the alignment on the tablet",
+    );
+  });
+
   test("hover rules live only inside the hover media query", () => {
     const text = css();
     const marker = text.indexOf("@media (hover: hover)");

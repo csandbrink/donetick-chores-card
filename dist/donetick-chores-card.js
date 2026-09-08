@@ -37,7 +37,11 @@ button { font: inherit; }
 .task.done .name { text-decoration: line-through; opacity: .55; }
 .task.done .due { font-style: italic; }
 .task.done .check { color: var(--success-color, #43a047); cursor: default; }
-.chooser { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; padding: 4px 8px 8px 50px; }
+/* Lines up with the circle above it, not with the task name. The check button
+   is 44px wide but the circle drawn inside it is 27px and centred, so it starts
+   8px in - matching the button box instead would leave the label hanging out to
+   the left. */
+.chooser { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; padding: 4px 8px 8px 8px; }
 .chooser-label { color: var(--secondary-text-color); font-size: .78rem; margin-right: 2px; }
 .member { position: relative; width: 34px; height: 34px; flex: 0 0 34px; border: 1px solid var(--primary-color); border: 1px solid color-mix(in srgb, var(--primary-color) 50%, var(--divider-color)); border-radius: 50%; background: var(--card-background-color); background: color-mix(in srgb, var(--primary-color) 12%, var(--card-background-color)); color: var(--primary-color); font-weight: 700; cursor: pointer; box-shadow: none; }
 button:disabled { opacity: .55; cursor: wait; }
@@ -83,7 +87,6 @@ button:disabled { opacity: .55; cursor: wait; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 420px) {
   .header { padding-inline: 16px; }
-  .chooser { padding-left: 46px; }
   .chooser-label { display: none; }
 }
 /* An element carrying the hidden attribute only gets display: none from the
