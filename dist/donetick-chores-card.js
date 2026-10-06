@@ -41,6 +41,30 @@ button { font: inherit; }
 .chooser-label { color: var(--secondary-text-color); font-size: .78rem; margin-right: 2px; }
 .member { position: relative; width: 34px; height: 34px; flex: 0 0 34px; border: 1px solid var(--primary-color); border: 1px solid color-mix(in srgb, var(--primary-color) 50%, var(--divider-color)); border-radius: 50%; background: var(--card-background-color); background: color-mix(in srgb, var(--primary-color) 12%, var(--card-background-color)); color: var(--primary-color); font-weight: 700; cursor: pointer; box-shadow: none; }
 button:disabled { opacity: .55; cursor: wait; }
+/* Edit / delete sit under the member chooser, lined up with it. */
+.row-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 0 8px 8px 8px; }
+.row-action { min-height: 44px; border: 1px solid var(--divider-color); border-radius: 10px; padding: 0 14px; background: transparent; color: var(--primary-text-color); cursor: pointer; }
+.row-action.danger { border-color: var(--error-color); color: var(--error-color); }
+.confirm-text { color: var(--error-color); font-size: .85rem; margin-right: 4px; }
+/* Person filter chips above the list. */
+.filters { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 14px 10px; }
+.filter { min-height: 44px; border: 1px solid var(--divider-color); border-radius: 22px; padding: 0 16px; background: transparent; color: var(--primary-text-color); cursor: pointer; }
+.filter.selected { background: var(--primary-color); border-color: var(--primary-color); color: var(--text-primary-color); font-weight: 600; }
+/* Due-date groups. */
+.group-header { padding: 10px 8px 4px; color: var(--secondary-text-color); font-size: .78rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.group .task:first-child { border-top: 0; }
+.more { display: block; width: calc(100% - 20px); min-height: 44px; margin: 0 10px 10px; border: 1px solid var(--divider-color); border-radius: 10px; background: transparent; color: var(--primary-color); font-weight: 600; cursor: pointer; }
+/* Compact mode for wall tablets: tighter rows, same 44 px tap targets. */
+ha-card.compact .header { padding: 8px 10px 4px 16px; }
+ha-card.compact .title { font-size: 1.05rem; }
+ha-card.compact .list { padding: 0 6px 6px; }
+ha-card.compact .task { padding: 2px 2px; }
+ha-card.compact .task-main { min-height: 44px; }
+ha-card.compact .text { padding: 1px 6px 1px 2px; }
+ha-card.compact .name { font-size: .92rem; line-height: 1.2; }
+ha-card.compact .due { font-size: .72rem; margin-top: 0; }
+ha-card.compact .filters { padding: 0 10px 6px; }
+ha-card.compact .group-header { padding: 6px 6px 2px; }
 .empty, .loading { padding: 20px; color: var(--secondary-text-color); }
 .spinner { width: 19px; height: 19px; border: 2px solid var(--divider-color); border-top-color: var(--primary-color); border-radius: 50%; animation: spin .8s linear infinite; }
 .dialog-backdrop { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .48); }
@@ -63,6 +87,12 @@ button:disabled { opacity: .55; cursor: wait; }
 .member::after, .create-member::after { content: ""; position: absolute; inset: -4px; border-radius: inherit; }
 .create-member::after { inset: -3px; }
 .create-member.selected { background: var(--primary-color); color: var(--text-primary-color); }
+.interval-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.weekdays { margin: 0; padding: 0; border: 0; }
+.weekday-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.weekday { min-width: 44px; min-height: 44px; padding: 0 8px; border: 1px solid var(--divider-color); border-radius: 10px; background: transparent; color: var(--primary-text-color); font-weight: 600; cursor: pointer; }
+.weekday.selected { background: var(--primary-color); border-color: var(--primary-color); color: var(--text-primary-color); }
+.edit-note { margin: 0; color: var(--secondary-text-color); font-size: .82rem; }
 .status-text { flex: 1; }
 .status-close { flex: 0 0 auto; box-sizing: content-box; width: 28px; height: 28px; padding: 8px; margin: -8px -4px -8px 0; border: 0; border-radius: 50%; background: transparent; color: var(--primary-text-color); font-size: 1.2rem; line-height: 1; cursor: pointer; }
 .form-error { border-radius: 10px; padding: 10px 12px; border: 1px solid var(--error-color); background: transparent; background: color-mix(in srgb, var(--error-color) 12%, transparent); color: var(--error-color); font-size: .85rem; }
@@ -90,6 +120,10 @@ button:disabled { opacity: .55; cursor: wait; }
    class the card hides needs its own override. */
 .chooser[hidden] { display: none; }
 .status[hidden] { display: none; }
+.row-actions[hidden] { display: none; }
+.filters[hidden] { display: none; }
+.interval-row[hidden] { display: none; }
+.more[hidden] { display: none; }
 `;
   var cachedStyleSheet;
   function sharedStyleSheet() {
@@ -125,6 +159,16 @@ button:disabled { opacity: .55; cursor: wait; }
   function isBeforeToday(time, now = /* @__PURE__ */ new Date()) {
     return startOfDay(new Date(time)) < startOfDay(now);
   }
+  function toDateTimeLocal(value) {
+    const time = parseDue(value);
+    if (time === null) return "";
+    const date = new Date(time);
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
+  function defaultTimeOfDay(now = /* @__PURE__ */ new Date()) {
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 18, 0, 0, 0);
+  }
   function formatDayMonth(time, locale) {
     return new Intl.DateTimeFormat(locale, { day: "2-digit", month: "2-digit" }).format(new Date(time));
   }
@@ -139,6 +183,17 @@ button:disabled { opacity: .55; cursor: wait; }
     "card.loading": "Lade Aufgaben \u2026",
     "card.empty": "Keine offenen Aufgaben",
     "card.open_count": "{count} offen",
+    "card.show_more": "Weitere anzeigen ({count})",
+    "card.show_less": "Weniger anzeigen",
+    "filter.label": "Nach Person filtern",
+    "filter.all": "Alle",
+    "filter.unassigned": "Unzugewiesen",
+    "group.overdue": "\xDCberf\xE4llig",
+    "group.today": "Heute",
+    "group.week": "Diese Woche",
+    "group.later": "Sp\xE4ter",
+    "group.none": "Ohne Termin",
+    "group.count": "{label} ({count})",
     "row.booked_waiting": "Gebucht \u2013 warte auf Donetick \u2026",
     "row.already_booked": "Bereits gebucht",
     "row.pick_completer": "Erlediger ausw\xE4hlen",
@@ -146,6 +201,16 @@ button:disabled { opacity: .55; cursor: wait; }
     "row.pick_completer_for": "Erlediger f\xFCr {task} ausw\xE4hlen",
     "row.completed_by": "Erledigt von",
     "row.completed_by_member": "Erledigt von {name}",
+    "row.edit": "Bearbeiten",
+    "row.edit_task": "{task} bearbeiten",
+    "row.delete": "L\xF6schen",
+    "row.delete_task": "{task} l\xF6schen",
+    "row.delete_confirm": "Wirklich l\xF6schen?",
+    "row.delete_confirm_yes": "Ja, l\xF6schen",
+    "row.delete_confirm_no": "Abbrechen",
+    "row.deleting": "Wird gel\xF6scht \u2026",
+    "row.deleted_waiting": "Gel\xF6scht \u2013 warte auf Donetick \u2026",
+    "row.was_deleted": "{task} wurde gel\xF6scht",
     "due.invalid": "Termin ung\xFCltig",
     "due.overdue_days": "Seit {days} Tagen f\xE4llig",
     "due.overdue_yesterday": "Seit gestern f\xE4llig",
@@ -157,7 +222,32 @@ button:disabled { opacity: .55; cursor: wait; }
     "frequency.weekly": "W\xF6chentlich",
     "frequency.monthly": "Monatlich",
     "frequency.yearly": "J\xE4hrlich",
+    "frequency.interval": "Alle N Tage/Wochen/Monate/Jahre",
+    "frequency.days_of_the_week": "Bestimmte Wochentage",
+    "unit.days": "Tage",
+    "unit.weeks": "Wochen",
+    "unit.months": "Monate",
+    "unit.years": "Jahre",
+    "weekday.monday": "Mo",
+    "weekday.tuesday": "Di",
+    "weekday.wednesday": "Mi",
+    "weekday.thursday": "Do",
+    "weekday.friday": "Fr",
+    "weekday.saturday": "Sa",
+    "weekday.sunday": "So",
+    "weekday.monday_long": "Montag",
+    "weekday.tuesday_long": "Dienstag",
+    "weekday.wednesday_long": "Mittwoch",
+    "weekday.thursday_long": "Donnerstag",
+    "weekday.friday_long": "Freitag",
+    "weekday.saturday_long": "Samstag",
+    "weekday.sunday_long": "Sonntag",
     "dialog.title": "Neue Aufgabe",
+    "dialog.title_edit": "Aufgabe bearbeiten",
+    "dialog.edit_note": "Wiederholung, Priorit\xE4t und Zust\xE4ndigkeit lassen sich nur in Donetick selbst \xE4ndern.",
+    "dialog.field_interval": "Alle",
+    "dialog.field_interval_unit": "Einheit",
+    "dialog.field_weekdays": "Wochentage",
     "dialog.close": "Dialog schlie\xDFen",
     "dialog.field_title": "Titel",
     "dialog.field_description": "Beschreibung",
@@ -173,6 +263,11 @@ button:disabled { opacity: .55; cursor: wait; }
     "error.member_unavailable": "Die ausgew\xE4hlte Donetick-Person ist nicht mehr verf\xFCgbar.",
     "error.config_entry_missing": "Die Donetick-Konfigurations-ID fehlt. Bitte die Integration neu laden.",
     "error.due_invalid": "Das F\xE4lligkeitsdatum ist ung\xFCltig.",
+    "error.interval_invalid": "Das Intervall muss eine ganze Zahl ab 1 sein.",
+    "error.weekdays_required": "Bitte mindestens einen Wochentag ausw\xE4hlen.",
+    "error.update_failed": "Aufgabe konnte nicht gespeichert werden: {message}",
+    "error.delete_failed": "Aufgabe konnte nicht gel\xF6scht werden: {message}",
+    "error.task_gone": "Die Aufgabe ist nicht mehr vorhanden.",
     "error.no_users": "Keine Donetick-Benutzer verf\xFCgbar. Bitte die Integration neu laden.",
     "error.create_failed": "Aufgabe konnte nicht hinzugef\xFCgt werden: {message}",
     "error.complete_failed": "Aufgabe konnte nicht abgeschlossen werden: {message}",
@@ -180,11 +275,33 @@ button:disabled { opacity: .55; cursor: wait; }
     "status.completed_by": '\u201E{task}" \u2013 erledigt von {name}.',
     "status.completed": '\u201E{task}" wurde als erledigt gebucht.',
     "status.task_fallback": "Aufgabe",
+    "status.updated": '\u201E{task}" wurde gespeichert.',
+    "status.deleted": '\u201E{task}" wurde gel\xF6scht.',
     "config.todo_entity_required": "todo_entity ist erforderlich",
     "config.todo_entity_type": "todo_entity muss eine todo-Entit\xE4t sein (todo.\u2026)",
     "config.title_type": "title muss ein Text sein",
     "config.sensor_prefix_type": "sensor_prefix muss ein nicht leerer Text sein",
     "config.language_invalid": "language muss eine dieser Sprachen sein: {languages}",
+    "config.show_filters_type": "show_filters muss true oder false sein",
+    "config.group_by_invalid": "group_by muss einer dieser Werte sein: {values}",
+    "config.compact_type": "compact muss true oder false sein",
+    "config.max_items_type": "max_items muss eine ganze Zahl ab 1 sein",
+    "editor.todo_entity": "Donetick-Todo-Entit\xE4t",
+    "editor.todo_entity_helper": "Liefert circle_members und config_entry_id.",
+    "editor.title": "\xDCberschrift",
+    "editor.sensor_prefix": "Sensor-Pr\xE4fix",
+    "editor.sensor_prefix_helper": "Pr\xE4fix der Aufgaben-Sensoren, Standard sensor.donetick_chores_",
+    "editor.language": "Sprache",
+    "editor.language_auto": "Wie Home Assistant",
+    "editor.language_de": "Deutsch",
+    "editor.language_en": "Englisch",
+    "editor.show_filters": "Personenfilter anzeigen",
+    "editor.group_by": "Gruppierung",
+    "editor.group_by_none": "Keine",
+    "editor.group_by_due": "Nach F\xE4lligkeit",
+    "editor.compact": "Kompakte Darstellung (Wandtablet)",
+    "editor.max_items": "Maximal angezeigte Aufgaben",
+    "editor.max_items_helper": "Leer lassen, um alle anzuzeigen.",
     "picker.name": "Donetick Aufgaben",
     "picker.description": "Donetick-Aufgaben mit Auswahl des Erledigers"
   };
@@ -199,6 +316,17 @@ button:disabled { opacity: .55; cursor: wait; }
     "card.loading": "Loading chores \u2026",
     "card.empty": "No open chores",
     "card.open_count": "{count} open",
+    "card.show_more": "Show more ({count})",
+    "card.show_less": "Show less",
+    "filter.label": "Filter by person",
+    "filter.all": "All",
+    "filter.unassigned": "Unassigned",
+    "group.overdue": "Overdue",
+    "group.today": "Today",
+    "group.week": "This week",
+    "group.later": "Later",
+    "group.none": "No due date",
+    "group.count": "{label} ({count})",
     "row.booked_waiting": "Booked \u2013 waiting for Donetick \u2026",
     "row.already_booked": "Already booked",
     "row.pick_completer": "Choose who did it",
@@ -206,6 +334,16 @@ button:disabled { opacity: .55; cursor: wait; }
     "row.pick_completer_for": "Choose who did {task}",
     "row.completed_by": "Done by",
     "row.completed_by_member": "Done by {name}",
+    "row.edit": "Edit",
+    "row.edit_task": "Edit {task}",
+    "row.delete": "Delete",
+    "row.delete_task": "Delete {task}",
+    "row.delete_confirm": "Really delete?",
+    "row.delete_confirm_yes": "Yes, delete",
+    "row.delete_confirm_no": "Cancel",
+    "row.deleting": "Deleting \u2026",
+    "row.deleted_waiting": "Deleted \u2013 waiting for Donetick \u2026",
+    "row.was_deleted": "{task} has been deleted",
     "due.invalid": "Invalid due date",
     "due.overdue_days": "Overdue by {days} days",
     "due.overdue_yesterday": "Due since yesterday",
@@ -217,7 +355,32 @@ button:disabled { opacity: .55; cursor: wait; }
     "frequency.weekly": "Weekly",
     "frequency.monthly": "Monthly",
     "frequency.yearly": "Yearly",
+    "frequency.interval": "Every N days/weeks/months/years",
+    "frequency.days_of_the_week": "Specific weekdays",
+    "unit.days": "days",
+    "unit.weeks": "weeks",
+    "unit.months": "months",
+    "unit.years": "years",
+    "weekday.monday": "Mon",
+    "weekday.tuesday": "Tue",
+    "weekday.wednesday": "Wed",
+    "weekday.thursday": "Thu",
+    "weekday.friday": "Fri",
+    "weekday.saturday": "Sat",
+    "weekday.sunday": "Sun",
+    "weekday.monday_long": "Monday",
+    "weekday.tuesday_long": "Tuesday",
+    "weekday.wednesday_long": "Wednesday",
+    "weekday.thursday_long": "Thursday",
+    "weekday.friday_long": "Friday",
+    "weekday.saturday_long": "Saturday",
+    "weekday.sunday_long": "Sunday",
     "dialog.title": "New chore",
+    "dialog.title_edit": "Edit chore",
+    "dialog.edit_note": "Recurrence, priority and assignee can only be changed in Donetick itself.",
+    "dialog.field_interval": "Every",
+    "dialog.field_interval_unit": "Unit",
+    "dialog.field_weekdays": "Weekdays",
     "dialog.close": "Close dialog",
     "dialog.field_title": "Title",
     "dialog.field_description": "Description",
@@ -233,6 +396,11 @@ button:disabled { opacity: .55; cursor: wait; }
     "error.member_unavailable": "The selected Donetick user is no longer available.",
     "error.config_entry_missing": "The Donetick config entry id is missing. Please reload the integration.",
     "error.due_invalid": "The due date is invalid.",
+    "error.interval_invalid": "The interval must be a whole number of 1 or more.",
+    "error.weekdays_required": "Please pick at least one weekday.",
+    "error.update_failed": "The chore could not be saved: {message}",
+    "error.delete_failed": "The chore could not be deleted: {message}",
+    "error.task_gone": "The chore no longer exists.",
     "error.no_users": "No Donetick users available. Please reload the integration.",
     "error.create_failed": "The chore could not be added: {message}",
     "error.complete_failed": "The chore could not be completed: {message}",
@@ -240,11 +408,33 @@ button:disabled { opacity: .55; cursor: wait; }
     "status.completed_by": "\u201C{task}\u201D \u2013 done by {name}.",
     "status.completed": "\u201C{task}\u201D has been booked as done.",
     "status.task_fallback": "Chore",
+    "status.updated": "\u201C{task}\u201D has been saved.",
+    "status.deleted": "\u201C{task}\u201D has been deleted.",
     "config.todo_entity_required": "todo_entity is required",
     "config.todo_entity_type": "todo_entity must be a todo entity (todo.\u2026)",
     "config.title_type": "title must be a string",
     "config.sensor_prefix_type": "sensor_prefix must be a non-empty string",
     "config.language_invalid": "language must be one of: {languages}",
+    "config.show_filters_type": "show_filters must be true or false",
+    "config.group_by_invalid": "group_by must be one of: {values}",
+    "config.compact_type": "compact must be true or false",
+    "config.max_items_type": "max_items must be a whole number of 1 or more",
+    "editor.todo_entity": "Donetick todo entity",
+    "editor.todo_entity_helper": "Supplies circle_members and config_entry_id.",
+    "editor.title": "Heading",
+    "editor.sensor_prefix": "Sensor prefix",
+    "editor.sensor_prefix_helper": "Prefix of the chore sensors, default sensor.donetick_chores_",
+    "editor.language": "Language",
+    "editor.language_auto": "Follow Home Assistant",
+    "editor.language_de": "German",
+    "editor.language_en": "English",
+    "editor.show_filters": "Show person filter",
+    "editor.group_by": "Grouping",
+    "editor.group_by_none": "None",
+    "editor.group_by_due": "By due date",
+    "editor.compact": "Compact layout (wall tablet)",
+    "editor.max_items": "Maximum chores shown",
+    "editor.max_items_helper": "Leave empty to show all.",
     "picker.name": "Donetick Chores",
     "picker.description": "Donetick chores that ask who actually did the work"
   };
@@ -281,15 +471,20 @@ button:disabled { opacity: .55; cursor: wait; }
   }
 
   // src/dialog.js
-  var FREQUENCY_TYPES = ["once", "daily", "weekly", "monthly", "yearly"];
+  var FREQUENCY_TYPES = ["once", "daily", "weekly", "monthly", "yearly", "interval", "days_of_the_week"];
   var FREQUENCY_VALUES = new Set(FREQUENCY_TYPES);
+  var INTERVAL_UNITS = ["days", "weeks", "months", "years"];
+  var INTERVAL_UNIT_VALUES = new Set(INTERVAL_UNITS);
+  var WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+  var WEEKDAY_VALUES = new Set(WEEKDAYS);
   var PRIORITIES = [0, 1, 2, 3, 4, 5];
   function labelled(caption, control) {
     const label = document.createElement("label");
     label.append(caption, control);
     return label;
   }
-  function createDialog({ t, onClose, onSubmit, onSelectMember, trapFocus }) {
+  function createDialog({ t, mode = "create", onClose, onSubmit, onSelectMember, trapFocus }) {
+    const editing = mode === "edit";
     const backdrop = document.createElement("div");
     backdrop.className = "dialog-backdrop";
     backdrop.setAttribute("role", "presentation");
@@ -302,7 +497,7 @@ button:disabled { opacity: .55; cursor: wait; }
     header.className = "dialog-header";
     const heading = document.createElement("h2");
     heading.id = "new-task-title";
-    heading.textContent = t("dialog.title");
+    heading.textContent = editing ? t("dialog.title_edit") : t("dialog.title");
     const close = document.createElement("button");
     close.className = "dialog-close";
     close.type = "button";
@@ -330,6 +525,49 @@ button:disabled { opacity: .55; cursor: wait; }
       option.textContent = t(`frequency.${value}`);
       frequencyType.append(option);
     }
+    const interval = document.createElement("input");
+    interval.name = "interval";
+    interval.type = "number";
+    interval.min = "1";
+    interval.step = "1";
+    interval.inputMode = "numeric";
+    interval.value = "1";
+    const intervalUnit = document.createElement("select");
+    intervalUnit.name = "intervalUnit";
+    for (const value of INTERVAL_UNITS) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = t(`unit.${value}`);
+      intervalUnit.append(option);
+    }
+    const intervalRow = document.createElement("div");
+    intervalRow.className = "interval-row";
+    intervalRow.append(
+      labelled(t("dialog.field_interval"), interval),
+      labelled(t("dialog.field_interval_unit"), intervalUnit)
+    );
+    intervalRow.hidden = true;
+    const weekdayBox = document.createElement("fieldset");
+    weekdayBox.className = "weekdays";
+    const weekdayLegend = document.createElement("legend");
+    weekdayLegend.textContent = t("dialog.field_weekdays");
+    const weekdayRow = document.createElement("div");
+    weekdayRow.className = "weekday-row";
+    const weekdayButtons = /* @__PURE__ */ new Map();
+    for (const day of WEEKDAYS) {
+      const button = document.createElement("button");
+      button.className = "weekday";
+      button.type = "button";
+      button.dataset.weekday = day;
+      button.textContent = t(`weekday.${day}`);
+      button.title = t(`weekday.${day}_long`);
+      button.setAttribute("aria-label", t(`weekday.${day}_long`));
+      button.setAttribute("aria-pressed", "false");
+      weekdayButtons.set(day, button);
+      weekdayRow.append(button);
+    }
+    weekdayBox.append(weekdayLegend, weekdayRow);
+    weekdayBox.hidden = true;
     const priority = document.createElement("select");
     priority.name = "priority";
     for (const value of PRIORITIES) {
@@ -362,15 +600,30 @@ button:disabled { opacity: .55; cursor: wait; }
     form.append(
       labelled(t("dialog.field_title"), title),
       labelled(t("dialog.field_description"), description),
-      labelled(t("dialog.field_due"), due),
-      labelled(t("dialog.field_frequency"), frequencyType),
-      labelled(t("dialog.field_priority"), priority),
-      fieldset,
-      formError,
-      actions
+      labelled(t("dialog.field_due"), due)
     );
+    if (editing) {
+      const note = document.createElement("p");
+      note.className = "edit-note";
+      note.textContent = t("dialog.edit_note");
+      form.append(note);
+    } else {
+      form.append(
+        labelled(t("dialog.field_frequency"), frequencyType),
+        intervalRow,
+        weekdayBox,
+        labelled(t("dialog.field_priority"), priority),
+        fieldset
+      );
+    }
+    form.append(formError, actions);
     section.append(header, form);
     backdrop.append(section);
+    const syncFrequencyFields = () => {
+      intervalRow.hidden = frequencyType.value !== "interval";
+      weekdayBox.hidden = frequencyType.value !== "days_of_the_week";
+    };
+    frequencyType.addEventListener("change", syncFrequencyFields);
     close.addEventListener("click", () => onClose());
     cancel.addEventListener("click", () => onClose());
     backdrop.addEventListener("click", (event) => {
@@ -384,6 +637,15 @@ button:disabled { opacity: .55; cursor: wait; }
       }
       if (event.key === "Tab") trapFocus(event, section);
     });
+    weekdayRow.addEventListener("click", (event) => {
+      const button = event.target.closest?.("button.weekday");
+      if (!button) return;
+      const pressed = button.getAttribute("aria-pressed") === "true";
+      button.setAttribute("aria-pressed", String(!pressed));
+      button.classList.toggle("selected", !pressed);
+      formError.textContent = "";
+      formError.hidden = true;
+    });
     memberBox.addEventListener("click", (event) => {
       const button = event.target.closest?.("button.create-member");
       if (!button) return;
@@ -396,6 +658,15 @@ button:disabled { opacity: .55; cursor: wait; }
       formError.hidden = true;
       onSelectMember(Number(button.dataset.createUserId));
     });
+    const selectedWeekdays = () => WEEKDAYS.filter((day) => weekdayButtons.get(day).getAttribute("aria-pressed") === "true");
+    const setWeekdays = (days) => {
+      const wanted = new Set(days || []);
+      for (const [day, button] of weekdayButtons) {
+        const selected = wanted.has(day);
+        button.setAttribute("aria-pressed", String(selected));
+        button.classList.toggle("selected", selected);
+      }
+    };
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       onSubmit({
@@ -403,26 +674,48 @@ button:disabled { opacity: .55; cursor: wait; }
         description: description.value,
         due: due.value,
         frequencyType: frequencyType.value,
+        interval: interval.value,
+        intervalUnit: intervalUnit.value,
+        weekdays: selectedWeekdays(),
         priority: priority.value
       });
     });
     return {
       backdrop,
       section,
+      mode,
       title,
       description,
       due,
       frequencyType,
+      interval,
+      intervalUnit,
+      weekdayButtons,
       priority,
       memberBox,
       formError,
       save,
-      memberKey: null
+      memberKey: null,
+      selectedWeekdays,
+      setWeekdays,
+      syncFrequencyFields
     };
   }
 
   // src/card.js
-  var EMPTY_DRAFT = { title: "", description: "", due: "", frequencyType: "once", priority: "0" };
+  var EMPTY_DRAFT = {
+    title: "",
+    description: "",
+    due: "",
+    frequencyType: "once",
+    interval: "1",
+    intervalUnit: "days",
+    weekdays: [],
+    priority: "0"
+  };
+  var GROUP_BY_VALUES = ["none", "due"];
+  var DUE_GROUPS = ["overdue", "today", "week", "later", "none"];
+  var UNASSIGNED = "unassigned";
   var DonetickChoresCard = class extends HTMLElement {
     constructor() {
       super();
@@ -430,15 +723,21 @@ button:disabled { opacity: .55; cursor: wait; }
       this._language = DEFAULT_LANGUAGE;
       this._expandedTaskId = null;
       this._busyTaskIds = /* @__PURE__ */ new Set();
+      this._busyDeleteIds = /* @__PURE__ */ new Set();
+      this._confirmDeleteTaskId = null;
       this._dialogOpen = false;
+      this._editTaskId = null;
       this._busyCreate = false;
       this._selectedCreateUserId = null;
+      this._filter = null;
+      this._showAll = false;
       this._formErrorSource = null;
       this._formError = "";
       this._statusSource = null;
       this._statusMessage = "";
       this._draft = { ...EMPTY_DRAFT };
       this._completedTasks = /* @__PURE__ */ new Map();
+      this._deletedTasks = /* @__PURE__ */ new Map();
       this._dialog = null;
       this._focusBeforeDialog = null;
       this._statusTimer = null;
@@ -483,15 +782,17 @@ button:disabled { opacity: .55; cursor: wait; }
       if (this._shell) {
         this._applyShellLanguage();
         this._rows.clear();
+        this._filterKey = null;
         if (this._dialog) this._rebuildDialog();
       }
       return true;
     }
     _applyShellLanguage() {
-      const { add, statusClose } = this._shell;
+      const { add, statusClose, filters } = this._shell;
       add.title = this._t("card.add");
       add.setAttribute("aria-label", this._t("card.add"));
       statusClose.setAttribute("aria-label", this._t("card.dismiss_status"));
+      filters.setAttribute("aria-label", this._t("filter.label"));
     }
     /**
      * Sets the message above the list. Success messages clear themselves; errors
@@ -534,21 +835,42 @@ button:disabled { opacity: .55; cursor: wait; }
       if (config.language !== void 0 && !LANGUAGES.includes(config.language)) {
         throw new Error(t("config.language_invalid", { languages: LANGUAGES.join(", ") }));
       }
+      if (config.show_filters !== void 0 && typeof config.show_filters !== "boolean") {
+        throw new Error(t("config.show_filters_type"));
+      }
+      if (config.group_by !== void 0 && !GROUP_BY_VALUES.includes(config.group_by)) {
+        throw new Error(t("config.group_by_invalid", { values: GROUP_BY_VALUES.join(", ") }));
+      }
+      if (config.compact !== void 0 && typeof config.compact !== "boolean") {
+        throw new Error(t("config.compact_type"));
+      }
+      if (config.max_items !== void 0 && (!Number.isInteger(config.max_items) || config.max_items < 1)) {
+        throw new Error(t("config.max_items_type"));
+      }
       const previous = this._config;
       this._config = {
         sensor_prefix: "sensor.donetick_chores_",
+        show_filters: false,
+        group_by: "none",
+        compact: false,
         ...config
       };
       this._setLanguage(resolveLanguage(this._config.language, this._hass));
       const sourceChanged = previous && (previous.todo_entity !== this._config.todo_entity || previous.sensor_prefix !== this._config.sensor_prefix);
       if (sourceChanged) {
         this._expandedTaskId = null;
+        this._confirmDeleteTaskId = null;
         this._completedTasks.clear();
+        this._deletedTasks.clear();
         this._busyTaskIds.clear();
+        this._busyDeleteIds.clear();
+        this._filter = null;
+        this._showAll = false;
         this._setStatus(null);
         clearTimeout(this._pruneTimer);
         this._pruneTimer = null;
       }
+      if (!this._config.show_filters) this._filter = null;
       this._render();
     }
     set hass(hass) {
@@ -595,7 +917,8 @@ button:disabled { opacity: .55; cursor: wait; }
     }
     // How long a success message stays up, in milliseconds.
     static statusTimeoutMs = 8e3;
-    // How long a booking is held as done locally before the sensor must have caught up.
+    // How long a booking (or deletion) is held locally before the sensor must
+    // have caught up.
     static completedTimeoutMs = 12e4;
     // Masonry layout: height units of roughly 50 px. A header plus one row per
     // chore is far closer to the real height than a constant.
@@ -607,6 +930,10 @@ button:disabled { opacity: .55; cursor: wait; }
     // default tile size no matter how many chores it holds.
     getGridOptions() {
       return { rows: "auto", columns: "full", min_columns: 6 };
+    }
+    // The visual editor, registered in index.js.
+    static getConfigElement() {
+      return document.createElement("donetick-chores-card-editor");
     }
     // HA calls getStubConfig(hass, entities, entitiesFallback) when the card is
     // created from the card picker. This used to return todo.all_tasks verbatim,
@@ -637,12 +964,42 @@ button:disabled { opacity: .55; cursor: wait; }
         return String(a.state).localeCompare(String(b.state), locale);
       });
     }
+    _taskById(taskId) {
+      return this._tasks().find((candidate) => Number(candidate.attributes.task_id) === Number(taskId));
+    }
     _members() {
       const todo = this._hass?.states?.[this._config?.todo_entity];
       return Array.isArray(todo?.attributes?.circle_members) ? todo.attributes.circle_members : [];
     }
     _configEntryId() {
       return this._hass?.states?.[this._config?.todo_entity]?.attributes?.config_entry_id;
+    }
+    _sourceKey() {
+      return `${this._config.todo_entity}|${this._config.sensor_prefix}`;
+    }
+    _assignedTo(task) {
+      const id = Number(task.attributes.assigned_to_user_id);
+      return Number.isInteger(id) && id > 0 ? id : null;
+    }
+    // Applies the person filter. A filter pointing at a member who has left the
+    // circle is dropped rather than leaving an empty list behind.
+    _filteredTasks(tasks, members) {
+      if (!this._config.show_filters || this._filter === null) return tasks;
+      if (this._filter === UNASSIGNED) return tasks.filter((task) => this._assignedTo(task) === null);
+      if (!members.some((member) => Number(member.user_id) === this._filter)) {
+        this._filter = null;
+        return tasks;
+      }
+      return tasks.filter((task) => this._assignedTo(task) === this._filter);
+    }
+    _dueGroup(value) {
+      const time = parseDue(value);
+      if (time === null) return "none";
+      const days = daysFromToday(time);
+      if (days < 0) return "overdue";
+      if (days === 0) return "today";
+      if (days < 7) return "week";
+      return "later";
     }
     _initial(name) {
       return String(name || "?").trim().charAt(0).toLocaleUpperCase(this._locale());
@@ -692,51 +1049,78 @@ button:disabled { opacity: .55; cursor: wait; }
     // ---------------------------------------------------------------------------
     // Service calls
     // ---------------------------------------------------------------------------
-    async _createTask({ title, description, due, userId, frequencyType = "once", priority = 0 }) {
-      if (this._busyCreate) return;
+    _failForm(key, params) {
+      this._setFormError(key, params);
+      this._render();
+    }
+    /**
+     * Builds frequency, frequency_type and frequency_metadata for create_chore
+     * from the dialog values, or returns { error } with a form-error key.
+     * Donetick's validator wants metadata.unit for "interval" and a non-empty
+     * metadata.days for "days_of_the_week"; its scheduler reads metadata.time
+     * (RFC 3339) as the time of day for both.
+     */
+    _recurrence(draft, parsedDue) {
+      const type = FREQUENCY_VALUES.has(draft.frequencyType) ? draft.frequencyType : "once";
+      if (type === "once") return { frequency_type: "once" };
+      if (type !== "interval" && type !== "days_of_the_week") {
+        return { frequency_type: type, frequency: 1 };
+      }
+      const metadata = { time: (parsedDue || defaultTimeOfDay()).toISOString() };
+      try {
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (timezone) metadata.timezone = timezone;
+      } catch {
+      }
+      if (type === "interval") {
+        const interval = Number(draft.interval);
+        if (!Number.isInteger(interval) || interval < 1) return { error: "error.interval_invalid" };
+        metadata.unit = INTERVAL_UNIT_VALUES.has(draft.intervalUnit) ? draft.intervalUnit : "days";
+        return { frequency_type: "interval", frequency: interval, frequency_metadata: metadata };
+      }
+      const days = (Array.isArray(draft.weekdays) ? draft.weekdays : []).filter((day) => WEEKDAY_VALUES.has(day));
+      if (!days.length) return { error: "error.weekdays_required" };
+      metadata.days = days;
+      metadata.weekPattern = "every_week";
+      return { frequency_type: "days_of_the_week", frequency: 1, frequency_metadata: metadata };
+    }
+    _rememberDraft(values) {
       this._draft = {
-        title: String(title || ""),
-        description: String(description || ""),
-        due: String(due || ""),
-        frequencyType: String(frequencyType || "once"),
-        priority: String(priority ?? 0)
+        title: String(values.title || ""),
+        description: String(values.description || ""),
+        due: String(values.due || ""),
+        frequencyType: String(values.frequencyType || "once"),
+        interval: String(values.interval ?? "1"),
+        intervalUnit: String(values.intervalUnit || "days"),
+        weekdays: Array.isArray(values.weekdays) ? [...values.weekdays] : [],
+        priority: String(values.priority ?? 0)
       };
+    }
+    async _createTask(values) {
+      if (this._busyCreate) return;
+      const { userId, due } = values;
+      this._rememberDraft(values);
       const cleanTitle = this._draft.title.trim();
       const userWasSelected = userId != null;
       const selectedUser = this._members().find((member) => Number(member.user_id) === Number(userId));
       const configEntryId = this._configEntryId();
-      const resolvedFrequencyType = FREQUENCY_VALUES.has(this._draft.frequencyType) ? this._draft.frequencyType : "once";
       const parsedPriority = Number(this._draft.priority);
       const resolvedPriority = Number.isInteger(parsedPriority) && parsedPriority >= 0 && parsedPriority <= 5 ? parsedPriority : 0;
-      if (!cleanTitle) {
-        this._setFormError("error.title_required");
-        this._render();
-        return;
-      }
-      if (userWasSelected && !selectedUser) {
-        this._setFormError("error.member_unavailable");
-        this._render();
-        return;
-      }
-      if (!configEntryId) {
-        this._setFormError("error.config_entry_missing");
-        this._render();
-        return;
-      }
+      if (!cleanTitle) return this._failForm("error.title_required");
+      if (userWasSelected && !selectedUser) return this._failForm("error.member_unavailable");
+      if (!configEntryId) return this._failForm("error.config_entry_missing");
       const parsedDue = due ? new Date(due) : null;
-      if (parsedDue && Number.isNaN(parsedDue.getTime())) {
-        this._setFormError("error.due_invalid");
-        this._render();
-        return;
-      }
+      if (parsedDue && Number.isNaN(parsedDue.getTime())) return this._failForm("error.due_invalid");
+      const recurrence = this._recurrence(this._draft, parsedDue);
+      if (recurrence.error) return this._failForm(recurrence.error);
       this._busyCreate = true;
       this._setFormError(null);
       this._render();
       try {
         const data = {
           name: cleanTitle,
-          description: String(description || "").trim(),
-          frequency_type: resolvedFrequencyType,
+          description: this._draft.description.trim(),
+          ...recurrence,
           assign_strategy: selectedUser ? "keep_last_assigned" : "no_assignee",
           priority: resolvedPriority,
           is_rolling: false,
@@ -746,7 +1130,6 @@ button:disabled { opacity: .55; cursor: wait; }
           data.assignee_ids = [Number(selectedUser.user_id)];
           data.assigned_to = Number(selectedUser.user_id);
         }
-        if (resolvedFrequencyType !== "once") data.frequency = 1;
         if (parsedDue) data.next_due_date = parsedDue.toISOString();
         await this._hass.callService("donetick", "create_chore", data);
         this._dialogOpen = false;
@@ -761,9 +1144,85 @@ button:disabled { opacity: .55; cursor: wait; }
         this._render();
       }
     }
+    // donetick.update_task takes name, description and due_date - nothing else,
+    // which is why the edit dialog shows only those three fields.
+    async _updateTask(values) {
+      if (this._busyCreate) return;
+      const taskId = Number(this._editTaskId);
+      this._rememberDraft(values);
+      const cleanTitle = this._draft.title.trim();
+      const configEntryId = this._configEntryId();
+      const task = this._taskById(taskId);
+      if (!cleanTitle) return this._failForm("error.title_required");
+      if (!configEntryId) return this._failForm("error.config_entry_missing");
+      if (!task) return this._failForm("error.task_gone");
+      const parsedDue = this._draft.due ? new Date(this._draft.due) : null;
+      if (parsedDue && Number.isNaN(parsedDue.getTime())) return this._failForm("error.due_invalid");
+      const sourceKey = this._sourceKey();
+      this._busyCreate = true;
+      this._setFormError(null);
+      this._render();
+      try {
+        const data = {
+          task_id: taskId,
+          name: cleanTitle,
+          description: this._draft.description.trim(),
+          config_entry_id: configEntryId
+        };
+        if (parsedDue) data.due_date = parsedDue.toISOString();
+        await this._hass.callService("donetick", "update_task", data);
+        if (sourceKey !== this._sourceKey()) return;
+        this._dialogOpen = false;
+        this._editTaskId = null;
+        this._draft = { ...EMPTY_DRAFT };
+        this._setStatus("status.updated", { task: cleanTitle });
+      } catch (error) {
+        this._setFormError("error.update_failed", { message: error?.message || error });
+        this._notify(this._formError);
+      } finally {
+        this._busyCreate = false;
+        this._render();
+      }
+    }
+    async _delete(taskId) {
+      taskId = Number(taskId);
+      if (this._busyDeleteIds.has(taskId) || this._busyTaskIds.has(taskId)) return;
+      if (this._deletedTasks.has(taskId) || this._completedTasks.has(taskId)) return;
+      const configEntryId = this._configEntryId();
+      this._confirmDeleteTaskId = null;
+      if (!configEntryId) {
+        this._setStatus("error.config_entry_missing", void 0, { autoDismiss: false });
+        this._render();
+        return;
+      }
+      const task = this._taskById(taskId);
+      const taskName = task?.state ?? this._t("status.task_fallback");
+      const sourceKey = this._sourceKey();
+      this._setStatus(null);
+      this._busyDeleteIds.add(taskId);
+      this._render();
+      try {
+        await this._hass.callService("donetick", "delete_task", {
+          task_id: taskId,
+          config_entry_id: configEntryId
+        });
+        if (sourceKey !== this._sourceKey()) return;
+        if (this._expandedTaskId === taskId) this._expandedTaskId = null;
+        this._deletedTasks.set(taskId, { at: Date.now() });
+        this._armPruneTimer();
+        this._setStatus("status.deleted", { task: taskName });
+      } catch (error) {
+        this._setStatus("error.delete_failed", { message: error?.message || error }, { autoDismiss: false });
+        this._notify(this._statusMessage);
+      } finally {
+        this._busyDeleteIds.delete(taskId);
+        this._render();
+      }
+    }
     async _complete(taskId, userId, assignedTo = null) {
       if (this._busyTaskIds.has(Number(taskId))) return;
       if (this._completedTasks.has(Number(taskId))) return;
+      if (this._deletedTasks.has(Number(taskId))) return;
       const configEntryId = this._configEntryId();
       const memberExists = this._members().some((member2) => Number(member2.user_id) === Number(userId));
       const assignedToId = Number(assignedTo);
@@ -777,8 +1236,8 @@ button:disabled { opacity: .55; cursor: wait; }
         this._render();
         return;
       }
-      const task = this._tasks().find((candidate) => Number(candidate.attributes.task_id) === Number(taskId));
-      const sourceKey = `${this._config.todo_entity}|${this._config.sensor_prefix}`;
+      const task = this._taskById(taskId);
+      const sourceKey = this._sourceKey();
       const dueAtCompletion = task?.attributes?.next_due_date ?? null;
       const taskName = task?.state ?? this._t("status.task_fallback");
       const member = this._members().find((candidate) => Number(candidate.user_id) === Number(userId));
@@ -795,14 +1254,10 @@ button:disabled { opacity: .55; cursor: wait; }
           data.assigned_to = assignedToId;
         }
         await this._hass.callService("donetick", "complete_chore", data);
-        if (sourceKey !== `${this._config.todo_entity}|${this._config.sensor_prefix}`) return;
+        if (sourceKey !== this._sourceKey()) return;
         this._expandedTaskId = null;
         this._completedTasks.set(Number(taskId), { dueAtCompletion, at: Date.now() });
-        clearTimeout(this._pruneTimer);
-        this._pruneTimer = this.isConnected ? setTimeout(() => {
-          this._pruneTimer = null;
-          this._render();
-        }, this.constructor.completedTimeoutMs + 100) : null;
+        this._armPruneTimer();
         if (member) {
           this._setStatus("status.completed_by", { task: taskName, name: member.display_name });
         } else {
@@ -816,18 +1271,32 @@ button:disabled { opacity: .55; cursor: wait; }
         this._render();
       }
     }
+    // If Donetick stays silent no hass update arrives to prune the entry.
+    _armPruneTimer() {
+      clearTimeout(this._pruneTimer);
+      this._pruneTimer = this.isConnected ? setTimeout(() => {
+        this._pruneTimer = null;
+        this._render();
+      }, this.constructor.completedTimeoutMs + 100) : null;
+    }
     _pruneCompleted(tasks) {
-      if (!this._completedTasks.size) return;
+      if (!this._completedTasks.size && !this._deletedTasks.size) return;
       const byId = new Map(tasks.map((task) => [Number(task.attributes.task_id), task]));
       for (const [taskId, entry] of this._completedTasks) {
         const task = byId.get(taskId);
         const settled = !task || (task.attributes.next_due_date ?? null) !== entry.dueAtCompletion || Date.now() - entry.at > this.constructor.completedTimeoutMs;
         if (settled) this._completedTasks.delete(taskId);
       }
+      for (const [taskId, entry] of this._deletedTasks) {
+        if (!byId.has(taskId) || Date.now() - entry.at > this.constructor.completedTimeoutMs) {
+          this._deletedTasks.delete(taskId);
+        }
+      }
     }
     _closeDialog() {
       if (this._busyCreate) return;
       this._dialogOpen = false;
+      this._editTaskId = null;
       this._selectedCreateUserId = null;
       this._setFormError(null);
       this._draft = { ...EMPTY_DRAFT };
@@ -880,27 +1349,50 @@ button:disabled { opacity: .55; cursor: wait; }
         this._render();
       });
       status.append(statusText, statusClose);
+      const filters = document.createElement("div");
+      filters.className = "filters";
+      filters.setAttribute("role", "group");
+      filters.hidden = true;
       const list = document.createElement("div");
       list.className = "list";
-      card.append(header, status, list);
+      const more = document.createElement("button");
+      more.className = "more";
+      more.type = "button";
+      more.hidden = true;
+      card.append(header, status, filters, list, more);
       const dialogHost = document.createElement("div");
       dialogHost.className = "dialog-host";
       this.shadowRoot.append(card, dialogHost);
-      this._shell = { card, title, count, add, status, statusText, statusClose, list, dialogHost };
+      this._shell = { card, title, count, add, status, statusText, statusClose, filters, list, more, dialogHost };
       this._rows = /* @__PURE__ */ new Map();
+      this._groups = /* @__PURE__ */ new Map();
+      this._filterKey = null;
       this._applyShellLanguage();
       this._bindShellEvents();
     }
     // Rows are created and discarded continuously. Per-row listeners would have
     // to be re-attached every time; delegation on the list does not.
     _bindShellEvents() {
-      const { add, list } = this._shell;
+      const { add, list, filters, more } = this._shell;
       add.addEventListener("click", () => this._openDialog());
+      more.addEventListener("click", () => {
+        this._showAll = !this._showAll;
+        this._render();
+      });
+      filters.addEventListener("click", (event) => {
+        const chip = event.target.closest?.("button.filter");
+        if (!chip) return;
+        const value = chip.dataset.filter;
+        this._filter = value === "all" ? null : value === UNASSIGNED ? UNASSIGNED : Number(value);
+        this._showAll = false;
+        this._render();
+      });
       list.addEventListener("click", (event) => {
         const check = event.target.closest?.("button.check");
         if (check && !check.disabled) {
-          const taskId = Number(check.dataset.taskId);
-          this._expandedTaskId = this._expandedTaskId === taskId ? null : taskId;
+          const taskId2 = Number(check.dataset.taskId);
+          this._expandedTaskId = this._expandedTaskId === taskId2 ? null : taskId2;
+          this._confirmDeleteTaskId = null;
           this._render();
           return;
         }
@@ -912,12 +1404,35 @@ button:disabled { opacity: .55; cursor: wait; }
             Number(member.dataset.userId),
             Number.isInteger(assignedTo) && assignedTo > 0 ? assignedTo : null
           );
+          return;
+        }
+        const action = event.target.closest?.("button.row-action");
+        if (!action || action.disabled) return;
+        const taskId = Number(action.dataset.taskId);
+        switch (action.dataset.action) {
+          case "edit":
+            this._openEditDialog(taskId);
+            break;
+          case "delete":
+            this._confirmDeleteTaskId = taskId;
+            this._render();
+            break;
+          case "delete-confirm":
+            this._delete(taskId);
+            break;
+          case "delete-cancel":
+            this._confirmDeleteTaskId = null;
+            this._render();
+            break;
+          default:
+            break;
         }
       });
     }
     _openDialog() {
       this._focusBeforeDialog = this.shadowRoot.activeElement || this._shell.add;
       this._dialogOpen = true;
+      this._editTaskId = null;
       this._selectedCreateUserId = null;
       this._draft = { ...EMPTY_DRAFT };
       this._setStatus(null);
@@ -928,6 +1443,25 @@ button:disabled { opacity: .55; cursor: wait; }
       } else {
         this._setFormError(null);
       }
+      this._render();
+      this._dialog?.title.focus();
+    }
+    _openEditDialog(taskId) {
+      const task = this._taskById(taskId);
+      if (!task) return;
+      this._focusBeforeDialog = this.shadowRoot.activeElement || this._shell.add;
+      this._dialogOpen = true;
+      this._editTaskId = Number(taskId);
+      this._confirmDeleteTaskId = null;
+      this._selectedCreateUserId = null;
+      this._draft = {
+        ...EMPTY_DRAFT,
+        title: String(task.state ?? ""),
+        description: String(task.attributes.description ?? ""),
+        due: toDateTimeLocal(task.attributes.next_due_date)
+      };
+      this._setStatus(null);
+      this._setFormError(this._configEntryId() ? null : "error.config_entry_missing");
       this._render();
       this._dialog?.title.focus();
     }
@@ -962,8 +1496,11 @@ button:disabled { opacity: .55; cursor: wait; }
       chooserLabel.className = "chooser-label";
       chooserLabel.textContent = this._t("row.completed_by");
       chooser.append(chooserLabel);
-      root.append(main, chooser);
-      return { root, check, name, due, chooser, checkKey: null, chooserKey: null };
+      const actions = document.createElement("div");
+      actions.className = "row-actions";
+      actions.hidden = true;
+      root.append(main, chooser, actions);
+      return { root, check, name, due, chooser, actions, checkKey: null, chooserKey: null, actionsKey: null };
     }
     _checkContent(busy, done, assignedInitial) {
       if (busy) {
@@ -986,61 +1523,131 @@ button:disabled { opacity: .55; cursor: wait; }
       icon.setAttribute("icon", "mdi:checkbox-blank-circle-outline");
       return icon;
     }
+    _actionButton(action, taskId, label, ariaLabel, className = "") {
+      const button = document.createElement("button");
+      button.className = `row-action ${className}`.trim();
+      button.type = "button";
+      button.dataset.action = action;
+      button.dataset.taskId = String(taskId);
+      button.textContent = label;
+      if (ariaLabel) button.setAttribute("aria-label", ariaLabel);
+      return button;
+    }
     _updateRow(row, task, taskId, members) {
-      const done = this._completedTasks.has(taskId);
+      const deleted = this._deletedTasks.has(taskId);
+      const done = this._completedTasks.has(taskId) || deleted;
       const busy = this._busyTaskIds.has(taskId);
+      const deleting = this._busyDeleteIds.has(taskId);
       const expanded = this._expandedTaskId === taskId && !done;
       const due = task.attributes.next_due_date;
-      const assignedToId = Number(task.attributes.assigned_to_user_id);
-      const assignedTo = Number.isInteger(assignedToId) && assignedToId > 0 ? assignedToId : null;
-      const assignedMember = members.find((member) => Number(member.user_id) === assignedToId);
+      const assignedTo = this._assignedTo(task);
+      const assignedMember = members.find((member) => Number(member.user_id) === assignedTo);
       const assignedInitial = assignedMember ? this._memberInitial(assignedMember, members) : null;
       row.root.classList.toggle("expanded", expanded);
       row.root.classList.toggle("done", done);
+      row.root.classList.toggle("deleted", deleted);
       row.name.textContent = task.state;
-      row.due.textContent = done ? this._t("row.booked_waiting") : this._dueText(due);
+      row.due.textContent = deleted ? this._t("row.deleted_waiting") : done ? this._t("row.booked_waiting") : deleting ? this._t("row.deleting") : this._dueText(due);
       row.due.hidden = !row.due.textContent;
-      row.due.classList.toggle("overdue", !done && this._isOverdue(due));
+      row.due.classList.toggle("overdue", !done && !deleting && this._isOverdue(due));
       row.check.dataset.taskId = String(taskId);
-      row.check.disabled = busy || done;
+      row.check.disabled = busy || done || deleting;
       row.check.title = done ? this._t("row.already_booked") : this._t("row.pick_completer");
       row.check.setAttribute(
         "aria-label",
-        done ? this._t("row.was_booked", { task: task.state }) : this._t("row.pick_completer_for", { task: task.state })
+        deleted ? this._t("row.was_deleted", { task: task.state }) : done ? this._t("row.was_booked", { task: task.state }) : this._t("row.pick_completer_for", { task: task.state })
       );
       row.check.setAttribute("aria-expanded", String(expanded));
-      const checkKey = busy ? "busy" : done ? "done" : assignedInitial ? `initial:${assignedInitial}` : "open";
+      const checkKey = busy || deleting ? "busy" : done ? "done" : assignedInitial ? `initial:${assignedInitial}` : "open";
       if (row.checkKey !== checkKey) {
         row.checkKey = checkKey;
-        row.check.replaceChildren(this._checkContent(busy, done, assignedInitial));
+        row.check.replaceChildren(this._checkContent(busy || deleting, done, assignedInitial));
       }
       row.chooser.hidden = !expanded;
+      row.actions.hidden = !expanded;
       if (!expanded) {
         row.chooserKey = null;
+        row.actionsKey = null;
         return;
       }
-      const chooserKey = `${members.map((member) => `${member.user_id}:${member.display_name}`).join("|")}#${assignedTo}#${busy}`;
-      if (row.chooserKey === chooserKey) return;
-      row.chooserKey = chooserKey;
-      const buttons = members.map((member) => {
-        const button = document.createElement("button");
-        button.className = "member";
-        button.type = "button";
-        button.dataset.taskId = String(taskId);
-        button.dataset.userId = String(Number(member.user_id));
-        button.dataset.assignedToUserId = assignedTo == null ? "" : String(assignedTo);
-        button.title = member.display_name;
-        button.setAttribute("aria-label", this._t("row.completed_by_member", { name: member.display_name }));
-        button.disabled = busy;
-        button.textContent = this._memberInitial(member, members);
-        return button;
-      });
-      row.chooser.replaceChildren(row.chooser.firstElementChild, ...buttons);
+      const chooserKey = `${members.map((member) => `${member.user_id}:${member.display_name}`).join("|")}#${assignedTo}#${busy || deleting}`;
+      if (row.chooserKey !== chooserKey) {
+        row.chooserKey = chooserKey;
+        const buttons = members.map((member) => {
+          const button = document.createElement("button");
+          button.className = "member";
+          button.type = "button";
+          button.dataset.taskId = String(taskId);
+          button.dataset.userId = String(Number(member.user_id));
+          button.dataset.assignedToUserId = assignedTo == null ? "" : String(assignedTo);
+          button.title = member.display_name;
+          button.setAttribute("aria-label", this._t("row.completed_by_member", { name: member.display_name }));
+          button.disabled = busy || deleting;
+          button.textContent = this._memberInitial(member, members);
+          return button;
+        });
+        row.chooser.replaceChildren(row.chooser.firstElementChild, ...buttons);
+      }
+      const confirming = this._confirmDeleteTaskId === taskId;
+      const actionsKey = `${confirming}#${busy || deleting}#${task.state}`;
+      if (row.actionsKey === actionsKey) return;
+      row.actionsKey = actionsKey;
+      const disabled = busy || deleting;
+      if (confirming) {
+        const question = document.createElement("span");
+        question.className = "confirm-text";
+        question.setAttribute("role", "alert");
+        question.textContent = this._t("row.delete_confirm");
+        const yes = this._actionButton(
+          "delete-confirm",
+          taskId,
+          this._t("row.delete_confirm_yes"),
+          this._t("row.delete_task", { task: task.state }),
+          "danger"
+        );
+        const no = this._actionButton("delete-cancel", taskId, this._t("row.delete_confirm_no"));
+        yes.disabled = disabled;
+        no.disabled = disabled;
+        row.actions.replaceChildren(question, yes, no);
+      } else {
+        const edit = this._actionButton(
+          "edit",
+          taskId,
+          this._t("row.edit"),
+          this._t("row.edit_task", { task: task.state })
+        );
+        const remove = this._actionButton(
+          "delete",
+          taskId,
+          this._t("row.delete"),
+          this._t("row.delete_task", { task: task.state })
+        );
+        edit.disabled = disabled;
+        remove.disabled = disabled;
+        row.actions.replaceChildren(edit, remove);
+      }
+    }
+    // Only touch the container when the set of nodes or their order actually
+    // changed. Taking a node out of the DOM drops focus, even if it goes straight
+    // back in.
+    _syncChildren(container, ordered) {
+      const current = container.childNodes;
+      let changed = current.length !== ordered.length;
+      if (!changed) {
+        for (let index = 0; index < ordered.length; index += 1) {
+          if (current[index] !== ordered[index]) {
+            changed = true;
+            break;
+          }
+        }
+      }
+      if (changed) container.replaceChildren(...ordered);
     }
     _renderRows(tasks, members) {
       const { list } = this._shell;
       if (!tasks.length) {
         this._rows.clear();
+        this._groups.clear();
         list.replaceChildren(this._placeholder("empty", this._t("card.empty")));
         return;
       }
@@ -1055,34 +1662,98 @@ button:disabled { opacity: .55; cursor: wait; }
           this._rows.set(taskId, row);
         }
         this._updateRow(row, task, taskId, members);
-        ordered.push(row.root);
+        ordered.push({ node: row.root, group: this._dueGroup(task.attributes.next_due_date) });
       }
       for (const taskId of [...this._rows.keys()]) {
         if (!seen.has(taskId)) this._rows.delete(taskId);
       }
-      const current = list.childNodes;
-      let changed = current.length !== ordered.length;
-      if (!changed) {
-        for (let index = 0; index < ordered.length; index += 1) {
-          if (current[index] !== ordered[index]) {
-            changed = true;
-            break;
-          }
-        }
+      if (this._config.group_by !== "due") {
+        this._groups.clear();
+        this._syncChildren(list, ordered.map((entry) => entry.node));
+        return;
       }
-      if (changed) list.replaceChildren(...ordered);
+      const containers = [];
+      for (const key of DUE_GROUPS) {
+        const nodes = ordered.filter((entry) => entry.group === key).map((entry) => entry.node);
+        if (!nodes.length) {
+          this._groups.delete(key);
+          continue;
+        }
+        let group = this._groups.get(key);
+        if (!group) {
+          const root = document.createElement("section");
+          root.className = `group group-${key}`;
+          const header = document.createElement("div");
+          header.className = "group-header";
+          header.setAttribute("role", "heading");
+          header.setAttribute("aria-level", "3");
+          const rows = document.createElement("div");
+          rows.className = "group-rows";
+          root.append(header, rows);
+          group = { root, header, rows };
+          this._groups.set(key, group);
+        }
+        group.header.textContent = this._t("group.count", { label: this._t(`group.${key}`), count: nodes.length });
+        this._syncChildren(group.rows, nodes);
+        containers.push(group.root);
+      }
+      this._syncChildren(list, containers);
+    }
+    _renderFilters(members) {
+      const { filters } = this._shell;
+      if (!this._config.show_filters) {
+        filters.hidden = true;
+        this._filterKey = null;
+        return;
+      }
+      filters.hidden = false;
+      const key = `${this._language}|${members.map((member) => `${member.user_id}:${member.display_name}`).join("|")}`;
+      if (this._filterKey !== key) {
+        this._filterKey = key;
+        const chip = (value, label) => {
+          const button = document.createElement("button");
+          button.className = "filter";
+          button.type = "button";
+          button.dataset.filter = value;
+          button.textContent = label;
+          return button;
+        };
+        filters.replaceChildren(
+          chip("all", this._t("filter.all")),
+          ...members.map((member) => chip(String(Number(member.user_id)), member.display_name)),
+          chip(UNASSIGNED, this._t("filter.unassigned"))
+        );
+      }
+      const active = this._filter === null ? "all" : String(this._filter);
+      for (const button of filters.querySelectorAll("button.filter")) {
+        const pressed = button.dataset.filter === active;
+        button.classList.toggle("selected", pressed);
+        button.setAttribute("aria-pressed", String(pressed));
+      }
     }
     _createDialog() {
       return createDialog({
         t: (key, params) => this._t(key, params),
+        mode: this._editTaskId === null ? "create" : "edit",
         onClose: () => this._closeDialog(),
         onSelectMember: (userId) => {
           this._selectedCreateUserId = userId;
           this._setFormError(null);
         },
-        onSubmit: (values) => this._createTask({ ...values, userId: this._selectedCreateUserId }),
+        onSubmit: (values) => this._editTaskId === null ? this._createTask({ ...values, userId: this._selectedCreateUserId }) : this._updateTask(values),
         trapFocus: (event, section) => this._trapFocus(event, section)
       });
+    }
+    _fillDialog(dialog, draft) {
+      dialog.title.value = draft.title;
+      dialog.description.value = draft.description;
+      dialog.due.value = draft.due;
+      dialog.frequencyType.value = draft.frequencyType;
+      dialog.interval.value = draft.interval;
+      dialog.intervalUnit.value = draft.intervalUnit;
+      dialog.setWeekdays(draft.weekdays);
+      dialog.priority.value = draft.priority;
+      dialog.syncFrequencyFields();
     }
     // A language switch while the dialog is open: the labels are baked into the
     // markup, so the dialog is built again - with what the user has typed and
@@ -1091,11 +1762,16 @@ button:disabled { opacity: .55; cursor: wait; }
       const old = this._dialog;
       const hadFocus = this.shadowRoot.activeElement && old.section.contains(this.shadowRoot.activeElement);
       const fresh = this._createDialog();
-      fresh.title.value = old.title.value;
-      fresh.description.value = old.description.value;
-      fresh.due.value = old.due.value;
-      fresh.frequencyType.value = old.frequencyType.value;
-      fresh.priority.value = old.priority.value;
+      this._fillDialog(fresh, {
+        title: old.title.value,
+        description: old.description.value,
+        due: old.due.value,
+        frequencyType: old.frequencyType.value,
+        interval: old.interval.value,
+        intervalUnit: old.intervalUnit.value,
+        weekdays: old.selectedWeekdays(),
+        priority: old.priority.value
+      });
       this._dialog = fresh;
       this._shell.dialogHost.replaceChildren(fresh.backdrop);
       if (hadFocus) fresh.title.focus();
@@ -1105,7 +1781,7 @@ button:disabled { opacity: .55; cursor: wait; }
     _trapFocus(event, section) {
       const focusable = [...section.querySelectorAll(
         "button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled])"
-      )];
+      )].filter((element) => !element.closest("[hidden]"));
       if (!focusable.length) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
@@ -1157,6 +1833,7 @@ button:disabled { opacity: .55; cursor: wait; }
       }
       if (!this._dialog) {
         this._dialog = this._createDialog();
+        if (this._editTaskId !== null) this._fillDialog(this._dialog, this._draft);
         dialogHost.replaceChildren(this._dialog.backdrop);
       }
       this._updateDialog(members);
@@ -1164,12 +1841,16 @@ button:disabled { opacity: .55; cursor: wait; }
     _render() {
       if (!this.shadowRoot || !this._config) return;
       this._ensureShell();
-      const { title, count, status, statusText, list, add } = this._shell;
+      const { card, title, count, status, statusText, list, add, more } = this._shell;
       title.textContent = this._config.title ?? this._t("card.title_default");
+      card.classList.toggle("compact", this._config.compact === true);
       if (!this._hass) {
         count.textContent = "";
         add.disabled = true;
         this._rows.clear();
+        this._groups.clear();
+        this._shell.filters.hidden = true;
+        more.hidden = true;
         list.replaceChildren(this._placeholder("loading", this._t("card.loading")));
         return;
       }
@@ -1177,17 +1858,178 @@ button:disabled { opacity: .55; cursor: wait; }
       const tasks = this._tasks();
       const members = this._members();
       this._pruneCompleted(tasks);
-      count.textContent = this._t("card.open_count", { count: tasks.length - this._completedTasks.size });
+      const filtered = this._filteredTasks(tasks, members);
+      this._renderFilters(members);
+      const pending = filtered.filter((task) => {
+        const taskId = Number(task.attributes.task_id);
+        return this._completedTasks.has(taskId) || this._deletedTasks.has(taskId);
+      }).length;
+      count.textContent = this._t("card.open_count", { count: filtered.length - pending });
       statusText.textContent = this._statusMessage;
       status.hidden = !this._statusMessage;
-      this._renderRows(tasks, members);
+      const limit = this._config.max_items;
+      const truncated = limit !== void 0 && filtered.length > limit;
+      const visible = truncated && !this._showAll ? filtered.slice(0, limit) : filtered;
+      more.hidden = !truncated;
+      if (truncated) {
+        more.textContent = this._showAll ? this._t("card.show_less") : this._t("card.show_more", { count: filtered.length - limit });
+        more.setAttribute("aria-expanded", String(this._showAll));
+      }
+      this._renderRows(visible, members);
       this._renderDialog(members);
+    }
+  };
+
+  // src/editor.js
+  var DEFAULT_SENSOR_PREFIX = "sensor.donetick_chores_";
+  var DonetickChoresCardEditor = class extends HTMLElement {
+    constructor() {
+      super();
+      this.attachShadow({ mode: "open" });
+      this._config = {};
+      this._hass = null;
+      this._form = null;
+    }
+    setConfig(config) {
+      this._config = { ...config || {} };
+      this._render();
+    }
+    set hass(hass) {
+      this._hass = hass;
+      this._render();
+    }
+    get hass() {
+      return this._hass;
+    }
+    _language() {
+      return resolveLanguage(this._config.language, this._hass);
+    }
+    _t(key, params) {
+      return translate(this._language(), key, params);
+    }
+    /** The ha-form schema. Exported through a method so tests can read it. */
+    schema() {
+      const t = (key) => this._t(key);
+      return [
+        {
+          name: "todo_entity",
+          required: true,
+          selector: { entity: { domain: "todo" } }
+        },
+        { name: "title", selector: { text: {} } },
+        { name: "sensor_prefix", selector: { text: {} } },
+        {
+          name: "language",
+          selector: {
+            select: {
+              mode: "dropdown",
+              options: [
+                { value: "", label: t("editor.language_auto") },
+                ...LANGUAGES.map((language) => ({ value: language, label: t(`editor.language_${language}`) }))
+              ]
+            }
+          }
+        },
+        { name: "show_filters", selector: { boolean: {} } },
+        {
+          name: "group_by",
+          selector: {
+            select: {
+              mode: "dropdown",
+              options: GROUP_BY_VALUES.map((value) => ({ value, label: t(`editor.group_by_${value}`) }))
+            }
+          }
+        },
+        { name: "compact", selector: { boolean: {} } },
+        { name: "max_items", selector: { number: { min: 1, mode: "box", step: 1 } } }
+      ];
+    }
+    // What the form shows: the config plus the defaults the card applies, so an
+    // untouched option reads as what it does rather than as empty.
+    _formData() {
+      return {
+        sensor_prefix: DEFAULT_SENSOR_PREFIX,
+        language: "",
+        show_filters: false,
+        group_by: "none",
+        compact: false,
+        ...this._config
+      };
+    }
+    // Turns the form's value back into a config: defaults are left out again so
+    // the YAML stays as short as it was.
+    _configFrom(value) {
+      const config = { ...this._config };
+      const set = (key, next, isDefault) => {
+        if (next === void 0 || next === null || next === "" || isDefault) delete config[key];
+        else config[key] = next;
+      };
+      set("todo_entity", value.todo_entity, false);
+      set("title", value.title, false);
+      set("sensor_prefix", value.sensor_prefix, value.sensor_prefix === DEFAULT_SENSOR_PREFIX);
+      set("language", value.language, !LANGUAGES.includes(value.language));
+      set("show_filters", value.show_filters, value.show_filters !== true);
+      set("group_by", value.group_by, value.group_by === "none" || !GROUP_BY_VALUES.includes(value.group_by));
+      set("compact", value.compact, value.compact !== true);
+      const maxItems = Number(value.max_items);
+      set("max_items", Number.isInteger(maxItems) && maxItems >= 1 ? maxItems : void 0, false);
+      return config;
+    }
+    _render() {
+      if (!this._form) {
+        this._ensureHaForm();
+        const form2 = document.createElement("ha-form");
+        form2.addEventListener("value-changed", (event) => {
+          event.stopPropagation();
+          const next = this._configFrom(event.detail?.value || {});
+          this._config = next;
+          this.dispatchEvent(new CustomEvent("config-changed", {
+            detail: { config: next },
+            bubbles: true,
+            composed: true
+          }));
+        });
+        this.shadowRoot.append(form2);
+        this._form = form2;
+      }
+      const form = this._form;
+      form.hass = this._hass;
+      const language = this._language();
+      if (this._schemaLanguage !== language) {
+        this._schemaLanguage = language;
+        form.schema = this.schema();
+      }
+      form.data = this._formData();
+      form.computeLabel = (field) => this._t(`editor.${field.name}`);
+      form.computeHelper = (field) => {
+        const key = `editor.${field.name}_helper`;
+        const text = this._t(key);
+        return text === key ? void 0 : text;
+      };
+    }
+    // ha-form is lazy-loaded by Home Assistant. The dashboard editor normally
+    // has it by the time a custom editor opens; when it does not, opening a
+    // built-in card editor pulls it in. Best effort only - nothing here may throw.
+    _ensureHaForm() {
+      if (customElements.get("ha-form")) return;
+      try {
+        const loadHelpers = window.loadCardHelpers;
+        if (typeof loadHelpers !== "function") return;
+        Promise.resolve(loadHelpers()).then((helpers) => {
+          const card = helpers?.createCardElement?.({ type: "entities", entities: [] });
+          return card?.constructor?.getConfigElement?.();
+        }).catch(() => void 0);
+      } catch {
+      }
     }
   };
 
   // src/index.js
   if (!customElements.get("donetick-chores-card")) {
     customElements.define("donetick-chores-card", DonetickChoresCard);
+  }
+  if (!customElements.get("donetick-chores-card-editor")) {
+    customElements.define("donetick-chores-card-editor", DonetickChoresCardEditor);
   }
   var pickerLanguage = resolveLanguage(void 0, { language: document.documentElement.lang });
   window.customCards = window.customCards || [];

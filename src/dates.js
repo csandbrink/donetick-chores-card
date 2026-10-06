@@ -33,6 +33,26 @@ export function isBeforeToday(time, now = new Date()) {
   return startOfDay(new Date(time)) < startOfDay(now);
 }
 
+/**
+ * The value a datetime-local input wants ("YYYY-MM-DDTHH:mm", local time) for
+ * a due date, or "" when there is none or it cannot be read.
+ */
+export function toDateTimeLocal(value) {
+  const time = parseDue(value);
+  if (time === null) return "";
+  const date = new Date(time);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/**
+ * Today at 18:00 local time - the time of day Donetick's own frontend uses
+ * for a recurring chore when the user picks none.
+ */
+export function defaultTimeOfDay(now = new Date()) {
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 18, 0, 0, 0);
+}
+
 /** Day and month in the given locale, e.g. "06.10." or "10/06". */
 export function formatDayMonth(time, locale) {
   return new Intl.DateTimeFormat(locale, { day: "2-digit", month: "2-digit" }).format(new Date(time));

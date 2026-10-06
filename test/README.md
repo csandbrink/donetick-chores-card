@@ -38,6 +38,7 @@ not leak into another test.
 | `interaction.test.mjs` | Completing chores, the dialog, error paths, status messages |
 | `logic.test.mjs` | Date and initial handling, change detection, post-booking follow-up |
 | `i18n.test.mjs` | Locale key parity, language selection, English output, language switch at runtime |
+| `features.test.mjs` | The visual editor, person filter, grouping, interval/weekday recurrence, edit and delete, compact mode, `max_items`, validation of the new options |
 
 ## Language in tests
 

@@ -24,6 +24,45 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Visual editor.** `getConfigElement()` returns
+  `donetick-chores-card-editor`, an `ha-form` with one field per option: the
+  todo entity (entity picker limited to `todo`), title, sensor prefix,
+  language, person filter, grouping, compact layout and `max_items`. It fires
+  `config-changed`, leaves defaults out of the YAML and is labelled in the
+  card's language. `getStubConfig()` is unchanged.
+- **Person filter** (`show_filters: true`, off by default): chips for *All*,
+  each circle member and *Unassigned* above the list, with `aria-pressed` and
+  44 px tap targets. The selection survives data updates, follows a member who
+  leaves back to *All*, and is dropped on a source switch. The counter follows
+  the filter.
+- **Grouping by due date** (`group_by: due`, default `none`): *Overdue*,
+  *Today*, *This week*, *Later*, *No due date*, with translated headings that
+  name the count; empty groups are hidden, row nodes are reused when a chore
+  moves between groups.
+- **Real intervals and weekdays** in the create dialog: *every N
+  days/weeks/months/years* (`frequency_type: interval`, `frequency: N`,
+  `frequency_metadata: { unit, time, timezone }`) and *specific weekdays*
+  (`frequency_type: days_of_the_week`, `frequency_metadata: { days,
+  weekPattern: "every_week", time, timezone }`), as Donetick's validator and
+  scheduler expect them. The interval must be a whole number of 1 or more, at
+  least one weekday must be picked; both are reported in the dialog. The
+  existing types still send `frequency: 1`.
+- **Edit and delete** in the expanded row. *Edit* reuses the dialog with
+  title, description and due date - all that `donetick.update_task` accepts -
+  and says so. *Delete* asks *Really delete?* first and only then calls
+  `donetick.delete_task`; the row is held as deleted until the sensor
+  disappears. Both have busy and error states like completing.
+- **Wall-tablet options:** `compact: true` for tighter rows without touching
+  the 44 px tap targets, and `max_items: N` with a *Show more / Show less*
+  button.
+- Every new option is validated in `setConfig` with a translated error.
+- A "Limits" section in the README: no undo (the integration has no service
+  for it), editing restricted to what `update_task` takes, and integration-side
+  failures of `update_task`/`delete_task` being logged rather than raised.
+- Tests for the editor, filter, grouping, recurrence payloads and validation,
+  edit and delete (including confirmation, busy, failure, source switch and
+  expiry), compact mode, `max_items` and the new config checks, in German and
+  English. 195 tests now.
 - **English.** The card's interface is available in German and English. It
   follows the Home Assistant user's language (`hass.locale.language`, or
   `hass.language` on older frontends; `de-CH` counts as German, `en-GB` as
@@ -37,7 +76,7 @@ versioning follows [Semantic Versioning](https://semver.org/).
   adding one file - documented in the README.
 - Tests for the English output, the language selection, the `language`
   option, the runtime switch, and that every locale file carries exactly the
-  same keys. 131 tests now.
+  same keys.
 - Release workflow: pushing a `v*` tag runs the checks, verifies the tag
   against `package.json`, and publishes a GitHub release with
   `dist/donetick-chores-card.js` attached and the matching changelog section
@@ -50,6 +89,13 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- The README now states which services the card needs and that
+  `complete_chore`/`create_chore` are not part of the upstream integration
+  (2.0.1 registers `complete_task`, `create_task`, `update_task`,
+  `delete_task` and `skip_task`).
+- The recurrence picker lists *Every N days/weeks/months/years* and *Specific
+  weekdays* after *Yearly*; the dialog's focus trap skips the hidden
+  recurrence fields.
 - **The source now lives in `src/`** as ES modules (`index.js`, `card.js`,
   `dialog.js`, `styles.js`, `dates.js`, `i18n.js`, `locales/`), bundled by
   esbuild into the single, unminified `dist/donetick-chores-card.js` that Home

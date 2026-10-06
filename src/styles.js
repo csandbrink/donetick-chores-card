@@ -37,6 +37,30 @@ button { font: inherit; }
 .chooser-label { color: var(--secondary-text-color); font-size: .78rem; margin-right: 2px; }
 .member { position: relative; width: 34px; height: 34px; flex: 0 0 34px; border: 1px solid var(--primary-color); border: 1px solid color-mix(in srgb, var(--primary-color) 50%, var(--divider-color)); border-radius: 50%; background: var(--card-background-color); background: color-mix(in srgb, var(--primary-color) 12%, var(--card-background-color)); color: var(--primary-color); font-weight: 700; cursor: pointer; box-shadow: none; }
 button:disabled { opacity: .55; cursor: wait; }
+/* Edit / delete sit under the member chooser, lined up with it. */
+.row-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 0 8px 8px 8px; }
+.row-action { min-height: 44px; border: 1px solid var(--divider-color); border-radius: 10px; padding: 0 14px; background: transparent; color: var(--primary-text-color); cursor: pointer; }
+.row-action.danger { border-color: var(--error-color); color: var(--error-color); }
+.confirm-text { color: var(--error-color); font-size: .85rem; margin-right: 4px; }
+/* Person filter chips above the list. */
+.filters { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 14px 10px; }
+.filter { min-height: 44px; border: 1px solid var(--divider-color); border-radius: 22px; padding: 0 16px; background: transparent; color: var(--primary-text-color); cursor: pointer; }
+.filter.selected { background: var(--primary-color); border-color: var(--primary-color); color: var(--text-primary-color); font-weight: 600; }
+/* Due-date groups. */
+.group-header { padding: 10px 8px 4px; color: var(--secondary-text-color); font-size: .78rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.group .task:first-child { border-top: 0; }
+.more { display: block; width: calc(100% - 20px); min-height: 44px; margin: 0 10px 10px; border: 1px solid var(--divider-color); border-radius: 10px; background: transparent; color: var(--primary-color); font-weight: 600; cursor: pointer; }
+/* Compact mode for wall tablets: tighter rows, same 44 px tap targets. */
+ha-card.compact .header { padding: 8px 10px 4px 16px; }
+ha-card.compact .title { font-size: 1.05rem; }
+ha-card.compact .list { padding: 0 6px 6px; }
+ha-card.compact .task { padding: 2px 2px; }
+ha-card.compact .task-main { min-height: 44px; }
+ha-card.compact .text { padding: 1px 6px 1px 2px; }
+ha-card.compact .name { font-size: .92rem; line-height: 1.2; }
+ha-card.compact .due { font-size: .72rem; margin-top: 0; }
+ha-card.compact .filters { padding: 0 10px 6px; }
+ha-card.compact .group-header { padding: 6px 6px 2px; }
 .empty, .loading { padding: 20px; color: var(--secondary-text-color); }
 .spinner { width: 19px; height: 19px; border: 2px solid var(--divider-color); border-top-color: var(--primary-color); border-radius: 50%; animation: spin .8s linear infinite; }
 .dialog-backdrop { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .48); }
@@ -59,6 +83,12 @@ button:disabled { opacity: .55; cursor: wait; }
 .member::after, .create-member::after { content: ""; position: absolute; inset: -4px; border-radius: inherit; }
 .create-member::after { inset: -3px; }
 .create-member.selected { background: var(--primary-color); color: var(--text-primary-color); }
+.interval-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.weekdays { margin: 0; padding: 0; border: 0; }
+.weekday-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.weekday { min-width: 44px; min-height: 44px; padding: 0 8px; border: 1px solid var(--divider-color); border-radius: 10px; background: transparent; color: var(--primary-text-color); font-weight: 600; cursor: pointer; }
+.weekday.selected { background: var(--primary-color); border-color: var(--primary-color); color: var(--text-primary-color); }
+.edit-note { margin: 0; color: var(--secondary-text-color); font-size: .82rem; }
 .status-text { flex: 1; }
 .status-close { flex: 0 0 auto; box-sizing: content-box; width: 28px; height: 28px; padding: 8px; margin: -8px -4px -8px 0; border: 0; border-radius: 50%; background: transparent; color: var(--primary-text-color); font-size: 1.2rem; line-height: 1; cursor: pointer; }
 .form-error { border-radius: 10px; padding: 10px 12px; border: 1px solid var(--error-color); background: transparent; background: color-mix(in srgb, var(--error-color) 12%, transparent); color: var(--error-color); font-size: .85rem; }
@@ -86,6 +116,10 @@ button:disabled { opacity: .55; cursor: wait; }
    class the card hides needs its own override. */
 .chooser[hidden] { display: none; }
 .status[hidden] { display: none; }
+.row-actions[hidden] { display: none; }
+.filters[hidden] { display: none; }
+.interval-row[hidden] { display: none; }
+.more[hidden] { display: none; }
 `;
 
 let cachedStyleSheet;

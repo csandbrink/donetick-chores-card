@@ -251,12 +251,21 @@ describe("English output", () => {
     assert.equal(dialog.section.querySelector(".dialog-close").getAttribute("aria-label"), "Close dialog");
     assert.deepEqual(
       [...dialog.section.querySelectorAll("label")].map((label) => label.firstChild.textContent),
-      ["Title", "Description", "Due on", "Repeat", "Priority"],
+      ["Title", "Description", "Due on", "Repeat", "Every", "Unit", "Priority"],
     );
-    assert.equal(text(dialog.section.querySelector("legend")), "Assigned to");
+    assert.equal(text(dialog.section.querySelector("fieldset:not(.weekdays) legend")), "Assigned to");
+    assert.equal(text(dialog.section.querySelector(".weekdays legend")), "Weekdays");
     assert.deepEqual(
       [...dialog.frequencyType.options].map((option) => option.textContent),
-      ["Once", "Daily", "Weekly", "Monthly", "Yearly"],
+      ["Once", "Daily", "Weekly", "Monthly", "Yearly", "Every N days/weeks/months/years", "Specific weekdays"],
+    );
+    assert.deepEqual(
+      [...dialog.intervalUnit.options].map((option) => option.textContent),
+      ["days", "weeks", "months", "years"],
+    );
+    assert.deepEqual(
+      [...dialog.weekdayButtons.values()].map((button) => button.textContent),
+      ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
     );
     assert.equal(text(dialog.section.querySelector(".cancel")), "Cancel");
     assert.equal(text(dialog.save), "Save");

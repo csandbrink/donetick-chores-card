@@ -1,13 +1,24 @@
-// The "new chore" dialog: markup and the listeners that are fixed for its
-// lifetime. Everything that depends on card state (members, error text, busy
-// flag) is applied afterwards by the card's _updateDialog.
+// The chore dialog: markup and the listeners that are fixed for its lifetime.
+// It serves two purposes - creating a chore (every field) and editing one
+// (title, description, due date only, because donetick.update_task takes no
+// more than that). Everything that depends on card state (members, error text,
+// busy flag) is applied afterwards by the card's _updateDialog.
 
 // The picker and the validation share this list so the two cannot drift apart.
-// donetick.create_chore knows further types (adaptive, interval,
-// days_of_the_week, ...), but each of them also needs frequency_metadata and
-// makes no sense without a field to fill that in.
-export const FREQUENCY_TYPES = ["once", "daily", "weekly", "monthly", "yearly"];
+// "interval" and "days_of_the_week" carry their own fields below; the
+// remaining donetick.create_chore types (adaptive, day_of_the_month, trigger,
+// no_repeat) are left out because the card has no sensible input for them.
+export const FREQUENCY_TYPES = ["once", "daily", "weekly", "monthly", "yearly", "interval", "days_of_the_week"];
 export const FREQUENCY_VALUES = new Set(FREQUENCY_TYPES);
+
+// Units Donetick's scheduler accepts for an interval chore ("hours" exists
+// too, but is of no use for household chores on a wall tablet).
+export const INTERVAL_UNITS = ["days", "weeks", "months", "years"];
+export const INTERVAL_UNIT_VALUES = new Set(INTERVAL_UNITS);
+
+// Lower-case English weekday names - that is what Donetick compares against.
+export const WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+export const WEEKDAY_VALUES = new Set(WEEKDAYS);
 
 export const PRIORITIES = [0, 1, 2, 3, 4, 5];
 
@@ -21,16 +32,20 @@ function labelled(caption, control) {
 
 /**
  * Builds the dialog. `t` translates keys; the callbacks connect it to the card.
+ * `mode` is "create" or "edit".
  *
  * @param {{
  *   t: (key: string, params?: object) => string,
+ *   mode?: "create" | "edit",
  *   onClose: () => void,
  *   onSubmit: (values: object) => void,
  *   onSelectMember: (userId: number) => void,
  *   trapFocus: (event: KeyboardEvent, section: HTMLElement) => void,
  * }} options
  */
-export function createDialog({ t, onClose, onSubmit, onSelectMember, trapFocus }) {
+export function createDialog({ t, mode = "create", onClose, onSubmit, onSelectMember, trapFocus }) {
+  const editing = mode === "edit";
+
   const backdrop = document.createElement("div");
   backdrop.className = "dialog-backdrop";
   backdrop.setAttribute("role", "presentation");
@@ -45,7 +60,7 @@ export function createDialog({ t, onClose, onSubmit, onSelectMember, trapFocus }
   header.className = "dialog-header";
   const heading = document.createElement("h2");
   heading.id = "new-task-title";
-  heading.textContent = t("dialog.title");
+  heading.textContent = editing ? t("dialog.title_edit") : t("dialog.title");
   const close = document.createElement("button");
   close.className = "dialog-close";
   close.type = "button";
@@ -78,6 +93,54 @@ export function createDialog({ t, onClose, onSubmit, onSelectMember, trapFocus }
     option.textContent = t(`frequency.${value}`);
     frequencyType.append(option);
   }
+
+  // "every N <unit>" - only shown for the interval type.
+  const interval = document.createElement("input");
+  interval.name = "interval";
+  interval.type = "number";
+  interval.min = "1";
+  interval.step = "1";
+  interval.inputMode = "numeric";
+  interval.value = "1";
+  const intervalUnit = document.createElement("select");
+  intervalUnit.name = "intervalUnit";
+  for (const value of INTERVAL_UNITS) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = t(`unit.${value}`);
+    intervalUnit.append(option);
+  }
+  const intervalRow = document.createElement("div");
+  intervalRow.className = "interval-row";
+  intervalRow.append(
+    labelled(t("dialog.field_interval"), interval),
+    labelled(t("dialog.field_interval_unit"), intervalUnit),
+  );
+  intervalRow.hidden = true;
+
+  // Weekday toggles - only shown for days_of_the_week. Toggle buttons rather
+  // than checkboxes: they give a 44 px tap target without a styled checkbox.
+  const weekdayBox = document.createElement("fieldset");
+  weekdayBox.className = "weekdays";
+  const weekdayLegend = document.createElement("legend");
+  weekdayLegend.textContent = t("dialog.field_weekdays");
+  const weekdayRow = document.createElement("div");
+  weekdayRow.className = "weekday-row";
+  const weekdayButtons = new Map();
+  for (const day of WEEKDAYS) {
+    const button = document.createElement("button");
+    button.className = "weekday";
+    button.type = "button";
+    button.dataset.weekday = day;
+    button.textContent = t(`weekday.${day}`);
+    button.title = t(`weekday.${day}_long`);
+    button.setAttribute("aria-label", t(`weekday.${day}_long`));
+    button.setAttribute("aria-pressed", "false");
+    weekdayButtons.set(day, button);
+    weekdayRow.append(button);
+  }
+  weekdayBox.append(weekdayLegend, weekdayRow);
+  weekdayBox.hidden = true;
 
   const priority = document.createElement("select");
   priority.name = "priority";
@@ -116,14 +179,32 @@ export function createDialog({ t, onClose, onSubmit, onSelectMember, trapFocus }
     labelled(t("dialog.field_title"), title),
     labelled(t("dialog.field_description"), description),
     labelled(t("dialog.field_due"), due),
-    labelled(t("dialog.field_frequency"), frequencyType),
-    labelled(t("dialog.field_priority"), priority),
-    fieldset,
-    formError,
-    actions,
   );
+  if (editing) {
+    // update_task cannot touch recurrence, priority or assignee; say so
+    // instead of showing fields that would silently do nothing.
+    const note = document.createElement("p");
+    note.className = "edit-note";
+    note.textContent = t("dialog.edit_note");
+    form.append(note);
+  } else {
+    form.append(
+      labelled(t("dialog.field_frequency"), frequencyType),
+      intervalRow,
+      weekdayBox,
+      labelled(t("dialog.field_priority"), priority),
+      fieldset,
+    );
+  }
+  form.append(formError, actions);
   section.append(header, form);
   backdrop.append(section);
+
+  const syncFrequencyFields = () => {
+    intervalRow.hidden = frequencyType.value !== "interval";
+    weekdayBox.hidden = frequencyType.value !== "days_of_the_week";
+  };
+  frequencyType.addEventListener("change", syncFrequencyFields);
 
   close.addEventListener("click", () => onClose());
   cancel.addEventListener("click", () => onClose());
@@ -139,6 +220,16 @@ export function createDialog({ t, onClose, onSubmit, onSelectMember, trapFocus }
     if (event.key === "Tab") trapFocus(event, section);
   });
 
+  weekdayRow.addEventListener("click", (event) => {
+    const button = event.target.closest?.("button.weekday");
+    if (!button) return;
+    const pressed = button.getAttribute("aria-pressed") === "true";
+    button.setAttribute("aria-pressed", String(!pressed));
+    button.classList.toggle("selected", !pressed);
+    formError.textContent = "";
+    formError.hidden = true;
+  });
+
   memberBox.addEventListener("click", (event) => {
     const button = event.target.closest?.("button.create-member");
     if (!button) return;
@@ -152,6 +243,18 @@ export function createDialog({ t, onClose, onSubmit, onSelectMember, trapFocus }
     onSelectMember(Number(button.dataset.createUserId));
   });
 
+  const selectedWeekdays = () =>
+    WEEKDAYS.filter((day) => weekdayButtons.get(day).getAttribute("aria-pressed") === "true");
+
+  const setWeekdays = (days) => {
+    const wanted = new Set(days || []);
+    for (const [day, button] of weekdayButtons) {
+      const selected = wanted.has(day);
+      button.setAttribute("aria-pressed", String(selected));
+      button.classList.toggle("selected", selected);
+    }
+  };
+
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     onSubmit({
@@ -159,12 +262,17 @@ export function createDialog({ t, onClose, onSubmit, onSelectMember, trapFocus }
       description: description.value,
       due: due.value,
       frequencyType: frequencyType.value,
+      interval: interval.value,
+      intervalUnit: intervalUnit.value,
+      weekdays: selectedWeekdays(),
       priority: priority.value,
     });
   });
 
   return {
-    backdrop, section, title, description, due, frequencyType, priority,
+    backdrop, section, mode, title, description, due, frequencyType,
+    interval, intervalUnit, weekdayButtons, priority,
     memberBox, formError, save, memberKey: null,
+    selectedWeekdays, setWeekdays, syncFrequencyFields,
   };
 }

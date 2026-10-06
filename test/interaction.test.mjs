@@ -408,14 +408,14 @@ describe("Dialog", () => {
     assert.equal(hass.calls[0].data.assign_strategy, "no_assignee");
   });
 
-  test("offers monthly and yearly as well", () => {
+  test("offers monthly, yearly, an interval and weekdays", () => {
     const env = loadCard();
     const card = makeCard(env);
     card.hass = makeHass({ tasks: [] });
     const dialog = open(card);
     assert.deepEqual(
       [...dialog.frequencyType.options].map((option) => option.value),
-      ["once", "daily", "weekly", "monthly", "yearly"],
+      ["once", "daily", "weekly", "monthly", "yearly", "interval", "days_of_the_week"],
     );
   });
 

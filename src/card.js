@@ -1,9 +1,23 @@
 import { STYLES, sharedStyleSheet } from "./styles.js";
-import { parseDue, daysFromToday, isBeforeToday, formatDayMonth } from "./dates.js";
+import { parseDue, daysFromToday, isBeforeToday, formatDayMonth, toDateTimeLocal, defaultTimeOfDay } from "./dates.js";
 import { LANGUAGES, DEFAULT_LANGUAGE, resolveLanguage, translate, localeOf } from "./i18n.js";
-import { createDialog, FREQUENCY_VALUES } from "./dialog.js";
+import {
+  createDialog, FREQUENCY_VALUES, INTERVAL_UNIT_VALUES, WEEKDAY_VALUES,
+} from "./dialog.js";
 
-const EMPTY_DRAFT = { title: "", description: "", due: "", frequencyType: "once", priority: "0" };
+const EMPTY_DRAFT = {
+  title: "", description: "", due: "", frequencyType: "once",
+  interval: "1", intervalUnit: "days", weekdays: [], priority: "0",
+};
+
+export const GROUP_BY_VALUES = ["none", "due"];
+
+// Order of the due-date groups on screen. Empty groups are not rendered.
+const DUE_GROUPS = ["overdue", "today", "week", "later", "none"];
+
+// The person filter: null shows everything, a number is a member's user_id,
+// UNASSIGNED shows chores nobody is assigned to.
+const UNASSIGNED = "unassigned";
 
 export class DonetickChoresCard extends HTMLElement {
   constructor() {
@@ -12,9 +26,14 @@ export class DonetickChoresCard extends HTMLElement {
     this._language = DEFAULT_LANGUAGE;
     this._expandedTaskId = null;
     this._busyTaskIds = new Set();
+    this._busyDeleteIds = new Set();
+    this._confirmDeleteTaskId = null;
     this._dialogOpen = false;
+    this._editTaskId = null;
     this._busyCreate = false;
     this._selectedCreateUserId = null;
+    this._filter = null;
+    this._showAll = false;
     // Messages are kept as key + params so a language switch can re-translate
     // whatever is on screen; _formError and _statusMessage hold the text.
     this._formErrorSource = null;
@@ -23,6 +42,7 @@ export class DonetickChoresCard extends HTMLElement {
     this._statusMessage = "";
     this._draft = { ...EMPTY_DRAFT };
     this._completedTasks = new Map();
+    this._deletedTasks = new Map();
     this._dialog = null;
     this._focusBeforeDialog = null;
     this._statusTimer = null;
@@ -73,16 +93,18 @@ export class DonetickChoresCard extends HTMLElement {
     if (this._shell) {
       this._applyShellLanguage();
       this._rows.clear();
+      this._filterKey = null;
       if (this._dialog) this._rebuildDialog();
     }
     return true;
   }
 
   _applyShellLanguage() {
-    const { add, statusClose } = this._shell;
+    const { add, statusClose, filters } = this._shell;
     add.title = this._t("card.add");
     add.setAttribute("aria-label", this._t("card.add"));
     statusClose.setAttribute("aria-label", this._t("card.dismiss_status"));
+    filters.setAttribute("aria-label", this._t("filter.label"));
   }
 
   /**
@@ -133,9 +155,25 @@ export class DonetickChoresCard extends HTMLElement {
     if (config.language !== undefined && !LANGUAGES.includes(config.language)) {
       throw new Error(t("config.language_invalid", { languages: LANGUAGES.join(", ") }));
     }
+    if (config.show_filters !== undefined && typeof config.show_filters !== "boolean") {
+      throw new Error(t("config.show_filters_type"));
+    }
+    if (config.group_by !== undefined && !GROUP_BY_VALUES.includes(config.group_by)) {
+      throw new Error(t("config.group_by_invalid", { values: GROUP_BY_VALUES.join(", ") }));
+    }
+    if (config.compact !== undefined && typeof config.compact !== "boolean") {
+      throw new Error(t("config.compact_type"));
+    }
+    if (config.max_items !== undefined &&
+        (!Number.isInteger(config.max_items) || config.max_items < 1)) {
+      throw new Error(t("config.max_items_type"));
+    }
     const previous = this._config;
     this._config = {
       sensor_prefix: "sensor.donetick_chores_",
+      show_filters: false,
+      group_by: "none",
+      compact: false,
       ...config,
     };
     this._setLanguage(resolveLanguage(this._config.language, this._hass));
@@ -149,12 +187,18 @@ export class DonetickChoresCard extends HTMLElement {
         previous.sensor_prefix !== this._config.sensor_prefix);
     if (sourceChanged) {
       this._expandedTaskId = null;
+      this._confirmDeleteTaskId = null;
       this._completedTasks.clear();
+      this._deletedTasks.clear();
       this._busyTaskIds.clear();
+      this._busyDeleteIds.clear();
+      this._filter = null;
+      this._showAll = false;
       this._setStatus(null);
       clearTimeout(this._pruneTimer);
       this._pruneTimer = null;
     }
+    if (!this._config.show_filters) this._filter = null;
     this._render();
   }
 
@@ -211,7 +255,8 @@ export class DonetickChoresCard extends HTMLElement {
   // How long a success message stays up, in milliseconds.
   static statusTimeoutMs = 8000;
 
-  // How long a booking is held as done locally before the sensor must have caught up.
+  // How long a booking (or deletion) is held locally before the sensor must
+  // have caught up.
   static completedTimeoutMs = 120000;
 
   // Masonry layout: height units of roughly 50 px. A header plus one row per
@@ -225,6 +270,11 @@ export class DonetickChoresCard extends HTMLElement {
   // default tile size no matter how many chores it holds.
   getGridOptions() {
     return { rows: "auto", columns: "full", min_columns: 6 };
+  }
+
+  // The visual editor, registered in index.js.
+  static getConfigElement() {
+    return document.createElement("donetick-chores-card-editor");
   }
 
   // HA calls getStubConfig(hass, entities, entitiesFallback) when the card is
@@ -267,6 +317,10 @@ export class DonetickChoresCard extends HTMLElement {
       });
   }
 
+  _taskById(taskId) {
+    return this._tasks().find((candidate) => Number(candidate.attributes.task_id) === Number(taskId));
+  }
+
   _members() {
     const todo = this._hass?.states?.[this._config?.todo_entity];
     return Array.isArray(todo?.attributes?.circle_members)
@@ -276,6 +330,37 @@ export class DonetickChoresCard extends HTMLElement {
 
   _configEntryId() {
     return this._hass?.states?.[this._config?.todo_entity]?.attributes?.config_entry_id;
+  }
+
+  _sourceKey() {
+    return `${this._config.todo_entity}|${this._config.sensor_prefix}`;
+  }
+
+  _assignedTo(task) {
+    const id = Number(task.attributes.assigned_to_user_id);
+    return Number.isInteger(id) && id > 0 ? id : null;
+  }
+
+  // Applies the person filter. A filter pointing at a member who has left the
+  // circle is dropped rather than leaving an empty list behind.
+  _filteredTasks(tasks, members) {
+    if (!this._config.show_filters || this._filter === null) return tasks;
+    if (this._filter === UNASSIGNED) return tasks.filter((task) => this._assignedTo(task) === null);
+    if (!members.some((member) => Number(member.user_id) === this._filter)) {
+      this._filter = null;
+      return tasks;
+    }
+    return tasks.filter((task) => this._assignedTo(task) === this._filter);
+  }
+
+  _dueGroup(value) {
+    const time = parseDue(value);
+    if (time === null) return "none";
+    const days = daysFromToday(time);
+    if (days < 0) return "overdue";
+    if (days === 0) return "today";
+    if (days < 7) return "week";
+    return "later";
   }
 
   _initial(name) {
@@ -333,55 +418,86 @@ export class DonetickChoresCard extends HTMLElement {
   // Service calls
   // ---------------------------------------------------------------------------
 
-  async _createTask({ title, description, due, userId, frequencyType = "once", priority = 0 }) {
-    if (this._busyCreate) return;
+  _failForm(key, params) {
+    this._setFormError(key, params);
+    this._render();
+  }
+
+  /**
+   * Builds frequency, frequency_type and frequency_metadata for create_chore
+   * from the dialog values, or returns { error } with a form-error key.
+   * Donetick's validator wants metadata.unit for "interval" and a non-empty
+   * metadata.days for "days_of_the_week"; its scheduler reads metadata.time
+   * (RFC 3339) as the time of day for both.
+   */
+  _recurrence(draft, parsedDue) {
+    const type = FREQUENCY_VALUES.has(draft.frequencyType) ? draft.frequencyType : "once";
+    if (type === "once") return { frequency_type: "once" };
+    if (type !== "interval" && type !== "days_of_the_week") {
+      // frequency is the repeat interval; 1 keeps the previous behaviour.
+      return { frequency_type: type, frequency: 1 };
+    }
+    const metadata = { time: (parsedDue || defaultTimeOfDay()).toISOString() };
+    try {
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (timezone) metadata.timezone = timezone;
+    } catch {
+      // No timezone information: Donetick falls back to UTC.
+    }
+    if (type === "interval") {
+      const interval = Number(draft.interval);
+      if (!Number.isInteger(interval) || interval < 1) return { error: "error.interval_invalid" };
+      metadata.unit = INTERVAL_UNIT_VALUES.has(draft.intervalUnit) ? draft.intervalUnit : "days";
+      return { frequency_type: "interval", frequency: interval, frequency_metadata: metadata };
+    }
+    const days = (Array.isArray(draft.weekdays) ? draft.weekdays : []).filter((day) => WEEKDAY_VALUES.has(day));
+    if (!days.length) return { error: "error.weekdays_required" };
+    metadata.days = days;
+    metadata.weekPattern = "every_week";
+    return { frequency_type: "days_of_the_week", frequency: 1, frequency_metadata: metadata };
+  }
+
+  _rememberDraft(values) {
     this._draft = {
-      title: String(title || ""),
-      description: String(description || ""),
-      due: String(due || ""),
-      frequencyType: String(frequencyType || "once"),
-      priority: String(priority ?? 0),
+      title: String(values.title || ""),
+      description: String(values.description || ""),
+      due: String(values.due || ""),
+      frequencyType: String(values.frequencyType || "once"),
+      interval: String(values.interval ?? "1"),
+      intervalUnit: String(values.intervalUnit || "days"),
+      weekdays: Array.isArray(values.weekdays) ? [...values.weekdays] : [],
+      priority: String(values.priority ?? 0),
     };
+  }
+
+  async _createTask(values) {
+    if (this._busyCreate) return;
+    const { userId, due } = values;
+    this._rememberDraft(values);
     const cleanTitle = this._draft.title.trim();
     const userWasSelected = userId != null;
     const selectedUser = this._members().find((member) => Number(member.user_id) === Number(userId));
     const configEntryId = this._configEntryId();
-    const resolvedFrequencyType = FREQUENCY_VALUES.has(this._draft.frequencyType)
-      ? this._draft.frequencyType
-      : "once";
     const parsedPriority = Number(this._draft.priority);
     const resolvedPriority = Number.isInteger(parsedPriority) && parsedPriority >= 0 && parsedPriority <= 5
       ? parsedPriority
       : 0;
-    if (!cleanTitle) {
-      this._setFormError("error.title_required");
-      this._render();
-      return;
-    }
-    if (userWasSelected && !selectedUser) {
-      this._setFormError("error.member_unavailable");
-      this._render();
-      return;
-    }
-    if (!configEntryId) {
-      this._setFormError("error.config_entry_missing");
-      this._render();
-      return;
-    }
+    if (!cleanTitle) return this._failForm("error.title_required");
+    if (userWasSelected && !selectedUser) return this._failForm("error.member_unavailable");
+    if (!configEntryId) return this._failForm("error.config_entry_missing");
     const parsedDue = due ? new Date(due) : null;
-    if (parsedDue && Number.isNaN(parsedDue.getTime())) {
-      this._setFormError("error.due_invalid");
-      this._render();
-      return;
-    }
+    if (parsedDue && Number.isNaN(parsedDue.getTime())) return this._failForm("error.due_invalid");
+    const recurrence = this._recurrence(this._draft, parsedDue);
+    if (recurrence.error) return this._failForm(recurrence.error);
+
     this._busyCreate = true;
     this._setFormError(null);
     this._render();
     try {
       const data = {
         name: cleanTitle,
-        description: String(description || "").trim(),
-        frequency_type: resolvedFrequencyType,
+        description: this._draft.description.trim(),
+        ...recurrence,
         assign_strategy: selectedUser ? "keep_last_assigned" : "no_assignee",
         priority: resolvedPriority,
         is_rolling: false,
@@ -391,9 +507,6 @@ export class DonetickChoresCard extends HTMLElement {
         data.assignee_ids = [Number(selectedUser.user_id)];
         data.assigned_to = Number(selectedUser.user_id);
       }
-      // frequency is the repeat interval and only means anything for recurring
-      // chores; for "once" Donetick has no use for it.
-      if (resolvedFrequencyType !== "once") data.frequency = 1;
       if (parsedDue) data.next_due_date = parsedDue.toISOString();
       await this._hass.callService("donetick", "create_chore", data);
       this._dialogOpen = false;
@@ -409,9 +522,90 @@ export class DonetickChoresCard extends HTMLElement {
     }
   }
 
+  // donetick.update_task takes name, description and due_date - nothing else,
+  // which is why the edit dialog shows only those three fields.
+  async _updateTask(values) {
+    if (this._busyCreate) return;
+    const taskId = Number(this._editTaskId);
+    this._rememberDraft(values);
+    const cleanTitle = this._draft.title.trim();
+    const configEntryId = this._configEntryId();
+    const task = this._taskById(taskId);
+    if (!cleanTitle) return this._failForm("error.title_required");
+    if (!configEntryId) return this._failForm("error.config_entry_missing");
+    if (!task) return this._failForm("error.task_gone");
+    const parsedDue = this._draft.due ? new Date(this._draft.due) : null;
+    if (parsedDue && Number.isNaN(parsedDue.getTime())) return this._failForm("error.due_invalid");
+
+    const sourceKey = this._sourceKey();
+    this._busyCreate = true;
+    this._setFormError(null);
+    this._render();
+    try {
+      const data = {
+        task_id: taskId,
+        name: cleanTitle,
+        description: this._draft.description.trim(),
+        config_entry_id: configEntryId,
+      };
+      if (parsedDue) data.due_date = parsedDue.toISOString();
+      await this._hass.callService("donetick", "update_task", data);
+      if (sourceKey !== this._sourceKey()) return;
+      this._dialogOpen = false;
+      this._editTaskId = null;
+      this._draft = { ...EMPTY_DRAFT };
+      this._setStatus("status.updated", { task: cleanTitle });
+    } catch (error) {
+      this._setFormError("error.update_failed", { message: error?.message || error });
+      this._notify(this._formError);
+    } finally {
+      this._busyCreate = false;
+      this._render();
+    }
+  }
+
+  async _delete(taskId) {
+    taskId = Number(taskId);
+    if (this._busyDeleteIds.has(taskId) || this._busyTaskIds.has(taskId)) return;
+    if (this._deletedTasks.has(taskId) || this._completedTasks.has(taskId)) return;
+    const configEntryId = this._configEntryId();
+    this._confirmDeleteTaskId = null;
+    if (!configEntryId) {
+      this._setStatus("error.config_entry_missing", undefined, { autoDismiss: false });
+      this._render();
+      return;
+    }
+    const task = this._taskById(taskId);
+    const taskName = task?.state ?? this._t("status.task_fallback");
+    const sourceKey = this._sourceKey();
+    this._setStatus(null);
+    this._busyDeleteIds.add(taskId);
+    this._render();
+    try {
+      await this._hass.callService("donetick", "delete_task", {
+        task_id: taskId,
+        config_entry_id: configEntryId,
+      });
+      if (sourceKey !== this._sourceKey()) return;
+      if (this._expandedTaskId === taskId) this._expandedTaskId = null;
+      // The sensor only disappears after the coordinator's next refresh; hold
+      // the row as gone until then so nobody deletes it a second time.
+      this._deletedTasks.set(taskId, { at: Date.now() });
+      this._armPruneTimer();
+      this._setStatus("status.deleted", { task: taskName });
+    } catch (error) {
+      this._setStatus("error.delete_failed", { message: error?.message || error }, { autoDismiss: false });
+      this._notify(this._statusMessage);
+    } finally {
+      this._busyDeleteIds.delete(taskId);
+      this._render();
+    }
+  }
+
   async _complete(taskId, userId, assignedTo = null) {
     if (this._busyTaskIds.has(Number(taskId))) return;
     if (this._completedTasks.has(Number(taskId))) return;
+    if (this._deletedTasks.has(Number(taskId))) return;
     const configEntryId = this._configEntryId();
     const memberExists = this._members().some((member) => Number(member.user_id) === Number(userId));
     const assignedToId = Number(assignedTo);
@@ -425,8 +619,8 @@ export class DonetickChoresCard extends HTMLElement {
       this._render();
       return;
     }
-    const task = this._tasks().find((candidate) => Number(candidate.attributes.task_id) === Number(taskId));
-    const sourceKey = `${this._config.todo_entity}|${this._config.sensor_prefix}`;
+    const task = this._taskById(taskId);
+    const sourceKey = this._sourceKey();
     const dueAtCompletion = task?.attributes?.next_due_date ?? null;
     const taskName = task?.state ?? this._t("status.task_fallback");
     const member = this._members().find((candidate) => Number(candidate.user_id) === Number(userId));
@@ -444,20 +638,13 @@ export class DonetickChoresCard extends HTMLElement {
       }
       await this._hass.callService("donetick", "complete_chore", data);
       // The card may have been pointed at another source while the call ran.
-      if (sourceKey !== `${this._config.todo_entity}|${this._config.sensor_prefix}`) return;
+      if (sourceKey !== this._sourceKey()) return;
       this._expandedTaskId = null;
       // The coordinator only refreshes the sensor a moment later. Until then,
       // hold the row as done locally - otherwise nothing visibly happens and
       // the user books the chore a second time.
       this._completedTasks.set(Number(taskId), { dueAtCompletion, at: Date.now() });
-      // If Donetick stays silent no hass update arrives to prune the entry.
-      clearTimeout(this._pruneTimer);
-      this._pruneTimer = this.isConnected
-        ? setTimeout(() => {
-            this._pruneTimer = null;
-            this._render();
-          }, this.constructor.completedTimeoutMs + 100)
-        : null;
+      this._armPruneTimer();
       if (member) {
         this._setStatus("status.completed_by", { task: taskName, name: member.display_name });
       } else {
@@ -472,8 +659,19 @@ export class DonetickChoresCard extends HTMLElement {
     }
   }
 
+  // If Donetick stays silent no hass update arrives to prune the entry.
+  _armPruneTimer() {
+    clearTimeout(this._pruneTimer);
+    this._pruneTimer = this.isConnected
+      ? setTimeout(() => {
+          this._pruneTimer = null;
+          this._render();
+        }, this.constructor.completedTimeoutMs + 100)
+      : null;
+  }
+
   _pruneCompleted(tasks) {
-    if (!this._completedTasks.size) return;
+    if (!this._completedTasks.size && !this._deletedTasks.size) return;
     const byId = new Map(tasks.map((task) => [Number(task.attributes.task_id), task]));
     for (const [taskId, entry] of this._completedTasks) {
       const task = byId.get(taskId);
@@ -485,11 +683,17 @@ export class DonetickChoresCard extends HTMLElement {
         Date.now() - entry.at > this.constructor.completedTimeoutMs;
       if (settled) this._completedTasks.delete(taskId);
     }
+    for (const [taskId, entry] of this._deletedTasks) {
+      if (!byId.has(taskId) || Date.now() - entry.at > this.constructor.completedTimeoutMs) {
+        this._deletedTasks.delete(taskId);
+      }
+    }
   }
 
   _closeDialog() {
     if (this._busyCreate) return;
     this._dialogOpen = false;
+    this._editTaskId = null;
     this._selectedCreateUserId = null;
     this._setFormError(null);
     this._draft = { ...EMPTY_DRAFT };
@@ -551,10 +755,20 @@ export class DonetickChoresCard extends HTMLElement {
     });
     status.append(statusText, statusClose);
 
+    const filters = document.createElement("div");
+    filters.className = "filters";
+    filters.setAttribute("role", "group");
+    filters.hidden = true;
+
     const list = document.createElement("div");
     list.className = "list";
 
-    card.append(header, status, list);
+    const more = document.createElement("button");
+    more.className = "more";
+    more.type = "button";
+    more.hidden = true;
+
+    card.append(header, status, filters, list, more);
 
     // The dialog deliberately sits outside the ha-card. ha-card carries
     // overflow: hidden, and a position: fixed child gets clipped by that as
@@ -564,8 +778,10 @@ export class DonetickChoresCard extends HTMLElement {
     dialogHost.className = "dialog-host";
 
     this.shadowRoot.append(card, dialogHost);
-    this._shell = { card, title, count, add, status, statusText, statusClose, list, dialogHost };
+    this._shell = { card, title, count, add, status, statusText, statusClose, filters, list, more, dialogHost };
     this._rows = new Map();
+    this._groups = new Map();
+    this._filterKey = null;
     this._applyShellLanguage();
     this._bindShellEvents();
   }
@@ -573,15 +789,30 @@ export class DonetickChoresCard extends HTMLElement {
   // Rows are created and discarded continuously. Per-row listeners would have
   // to be re-attached every time; delegation on the list does not.
   _bindShellEvents() {
-    const { add, list } = this._shell;
+    const { add, list, filters, more } = this._shell;
 
     add.addEventListener("click", () => this._openDialog());
+
+    more.addEventListener("click", () => {
+      this._showAll = !this._showAll;
+      this._render();
+    });
+
+    filters.addEventListener("click", (event) => {
+      const chip = event.target.closest?.("button.filter");
+      if (!chip) return;
+      const value = chip.dataset.filter;
+      this._filter = value === "all" ? null : value === UNASSIGNED ? UNASSIGNED : Number(value);
+      this._showAll = false;
+      this._render();
+    });
 
     list.addEventListener("click", (event) => {
       const check = event.target.closest?.("button.check");
       if (check && !check.disabled) {
         const taskId = Number(check.dataset.taskId);
         this._expandedTaskId = this._expandedTaskId === taskId ? null : taskId;
+        this._confirmDeleteTaskId = null;
         this._render();
         return;
       }
@@ -593,6 +824,30 @@ export class DonetickChoresCard extends HTMLElement {
           Number(member.dataset.userId),
           Number.isInteger(assignedTo) && assignedTo > 0 ? assignedTo : null,
         );
+        return;
+      }
+      const action = event.target.closest?.("button.row-action");
+      if (!action || action.disabled) return;
+      const taskId = Number(action.dataset.taskId);
+      switch (action.dataset.action) {
+        case "edit":
+          this._openEditDialog(taskId);
+          break;
+        case "delete":
+          // First tap asks, second tap deletes - a wall tablet gets touched by
+          // accident often enough.
+          this._confirmDeleteTaskId = taskId;
+          this._render();
+          break;
+        case "delete-confirm":
+          this._delete(taskId);
+          break;
+        case "delete-cancel":
+          this._confirmDeleteTaskId = null;
+          this._render();
+          break;
+        default:
+          break;
       }
     });
   }
@@ -601,6 +856,7 @@ export class DonetickChoresCard extends HTMLElement {
     // So focus can go back where it came from when the dialog closes.
     this._focusBeforeDialog = this.shadowRoot.activeElement || this._shell.add;
     this._dialogOpen = true;
+    this._editTaskId = null;
     this._selectedCreateUserId = null;
     this._draft = { ...EMPTY_DRAFT };
     this._setStatus(null);
@@ -611,6 +867,26 @@ export class DonetickChoresCard extends HTMLElement {
     } else {
       this._setFormError(null);
     }
+    this._render();
+    this._dialog?.title.focus();
+  }
+
+  _openEditDialog(taskId) {
+    const task = this._taskById(taskId);
+    if (!task) return;
+    this._focusBeforeDialog = this.shadowRoot.activeElement || this._shell.add;
+    this._dialogOpen = true;
+    this._editTaskId = Number(taskId);
+    this._confirmDeleteTaskId = null;
+    this._selectedCreateUserId = null;
+    this._draft = {
+      ...EMPTY_DRAFT,
+      title: String(task.state ?? ""),
+      description: String(task.attributes.description ?? ""),
+      due: toDateTimeLocal(task.attributes.next_due_date),
+    };
+    this._setStatus(null);
+    this._setFormError(this._configEntryId() ? null : "error.config_entry_missing");
     this._render();
     this._dialog?.title.focus();
   }
@@ -652,8 +928,12 @@ export class DonetickChoresCard extends HTMLElement {
     chooserLabel.textContent = this._t("row.completed_by");
     chooser.append(chooserLabel);
 
-    root.append(main, chooser);
-    return { root, check, name, due, chooser, checkKey: null, chooserKey: null };
+    const actions = document.createElement("div");
+    actions.className = "row-actions";
+    actions.hidden = true;
+
+    root.append(main, chooser, actions);
+    return { root, check, name, due, chooser, actions, checkKey: null, chooserKey: null, actionsKey: null };
   }
 
   _checkContent(busy, done, assignedInitial) {
@@ -678,67 +958,133 @@ export class DonetickChoresCard extends HTMLElement {
     return icon;
   }
 
+  _actionButton(action, taskId, label, ariaLabel, className = "") {
+    const button = document.createElement("button");
+    button.className = `row-action ${className}`.trim();
+    button.type = "button";
+    button.dataset.action = action;
+    button.dataset.taskId = String(taskId);
+    button.textContent = label;
+    if (ariaLabel) button.setAttribute("aria-label", ariaLabel);
+    return button;
+  }
+
   _updateRow(row, task, taskId, members) {
-    const done = this._completedTasks.has(taskId);
+    const deleted = this._deletedTasks.has(taskId);
+    const done = this._completedTasks.has(taskId) || deleted;
     const busy = this._busyTaskIds.has(taskId);
+    const deleting = this._busyDeleteIds.has(taskId);
     const expanded = this._expandedTaskId === taskId && !done;
     const due = task.attributes.next_due_date;
 
-    const assignedToId = Number(task.attributes.assigned_to_user_id);
-    const assignedTo = Number.isInteger(assignedToId) && assignedToId > 0 ? assignedToId : null;
-    const assignedMember = members.find((member) => Number(member.user_id) === assignedToId);
+    const assignedTo = this._assignedTo(task);
+    const assignedMember = members.find((member) => Number(member.user_id) === assignedTo);
     const assignedInitial = assignedMember ? this._memberInitial(assignedMember, members) : null;
 
     row.root.classList.toggle("expanded", expanded);
     row.root.classList.toggle("done", done);
+    row.root.classList.toggle("deleted", deleted);
 
     row.name.textContent = task.state;
-    row.due.textContent = done ? this._t("row.booked_waiting") : this._dueText(due);
+    row.due.textContent = deleted
+      ? this._t("row.deleted_waiting")
+      : done
+        ? this._t("row.booked_waiting")
+        : deleting
+          ? this._t("row.deleting")
+          : this._dueText(due);
     // A chore without a due date says nothing rather than "no due date".
     row.due.hidden = !row.due.textContent;
-    row.due.classList.toggle("overdue", !done && this._isOverdue(due));
+    row.due.classList.toggle("overdue", !done && !deleting && this._isOverdue(due));
 
     row.check.dataset.taskId = String(taskId);
-    row.check.disabled = busy || done;
+    row.check.disabled = busy || done || deleting;
     row.check.title = done ? this._t("row.already_booked") : this._t("row.pick_completer");
     row.check.setAttribute(
       "aria-label",
-      done
-        ? this._t("row.was_booked", { task: task.state })
-        : this._t("row.pick_completer_for", { task: task.state }),
+      deleted
+        ? this._t("row.was_deleted", { task: task.state })
+        : done
+          ? this._t("row.was_booked", { task: task.state })
+          : this._t("row.pick_completer_for", { task: task.state }),
     );
     row.check.setAttribute("aria-expanded", String(expanded));
 
-    const checkKey = busy ? "busy" : done ? "done" : assignedInitial ? `initial:${assignedInitial}` : "open";
+    const checkKey = busy || deleting ? "busy" : done ? "done" : assignedInitial ? `initial:${assignedInitial}` : "open";
     if (row.checkKey !== checkKey) {
       row.checkKey = checkKey;
-      row.check.replaceChildren(this._checkContent(busy, done, assignedInitial));
+      row.check.replaceChildren(this._checkContent(busy || deleting, done, assignedInitial));
     }
 
     row.chooser.hidden = !expanded;
+    row.actions.hidden = !expanded;
     if (!expanded) {
       row.chooserKey = null;
+      row.actionsKey = null;
       return;
     }
 
-    const chooserKey = `${members.map((member) => `${member.user_id}:${member.display_name}`).join("|")}#${assignedTo}#${busy}`;
-    if (row.chooserKey === chooserKey) return;
-    row.chooserKey = chooserKey;
+    const chooserKey = `${members.map((member) => `${member.user_id}:${member.display_name}`).join("|")}#${assignedTo}#${busy || deleting}`;
+    if (row.chooserKey !== chooserKey) {
+      row.chooserKey = chooserKey;
+      const buttons = members.map((member) => {
+        const button = document.createElement("button");
+        button.className = "member";
+        button.type = "button";
+        button.dataset.taskId = String(taskId);
+        button.dataset.userId = String(Number(member.user_id));
+        button.dataset.assignedToUserId = assignedTo == null ? "" : String(assignedTo);
+        button.title = member.display_name;
+        button.setAttribute("aria-label", this._t("row.completed_by_member", { name: member.display_name }));
+        button.disabled = busy || deleting;
+        button.textContent = this._memberInitial(member, members);
+        return button;
+      });
+      row.chooser.replaceChildren(row.chooser.firstElementChild, ...buttons);
+    }
 
-    const buttons = members.map((member) => {
-      const button = document.createElement("button");
-      button.className = "member";
-      button.type = "button";
-      button.dataset.taskId = String(taskId);
-      button.dataset.userId = String(Number(member.user_id));
-      button.dataset.assignedToUserId = assignedTo == null ? "" : String(assignedTo);
-      button.title = member.display_name;
-      button.setAttribute("aria-label", this._t("row.completed_by_member", { name: member.display_name }));
-      button.disabled = busy;
-      button.textContent = this._memberInitial(member, members);
-      return button;
-    });
-    row.chooser.replaceChildren(row.chooser.firstElementChild, ...buttons);
+    const confirming = this._confirmDeleteTaskId === taskId;
+    const actionsKey = `${confirming}#${busy || deleting}#${task.state}`;
+    if (row.actionsKey === actionsKey) return;
+    row.actionsKey = actionsKey;
+    const disabled = busy || deleting;
+    if (confirming) {
+      const question = document.createElement("span");
+      question.className = "confirm-text";
+      question.setAttribute("role", "alert");
+      question.textContent = this._t("row.delete_confirm");
+      const yes = this._actionButton("delete-confirm", taskId, this._t("row.delete_confirm_yes"),
+        this._t("row.delete_task", { task: task.state }), "danger");
+      const no = this._actionButton("delete-cancel", taskId, this._t("row.delete_confirm_no"));
+      yes.disabled = disabled;
+      no.disabled = disabled;
+      row.actions.replaceChildren(question, yes, no);
+    } else {
+      const edit = this._actionButton("edit", taskId, this._t("row.edit"),
+        this._t("row.edit_task", { task: task.state }));
+      const remove = this._actionButton("delete", taskId, this._t("row.delete"),
+        this._t("row.delete_task", { task: task.state }));
+      edit.disabled = disabled;
+      remove.disabled = disabled;
+      row.actions.replaceChildren(edit, remove);
+    }
+  }
+
+  // Only touch the container when the set of nodes or their order actually
+  // changed. Taking a node out of the DOM drops focus, even if it goes straight
+  // back in.
+  _syncChildren(container, ordered) {
+    const current = container.childNodes;
+    let changed = current.length !== ordered.length;
+    if (!changed) {
+      for (let index = 0; index < ordered.length; index += 1) {
+        if (current[index] !== ordered[index]) {
+          changed = true;
+          break;
+        }
+      }
+    }
+    if (changed) container.replaceChildren(...ordered);
   }
 
   _renderRows(tasks, members) {
@@ -746,6 +1092,7 @@ export class DonetickChoresCard extends HTMLElement {
 
     if (!tasks.length) {
       this._rows.clear();
+      this._groups.clear();
       list.replaceChildren(this._placeholder("empty", this._t("card.empty")));
       return;
     }
@@ -761,39 +1108,106 @@ export class DonetickChoresCard extends HTMLElement {
         this._rows.set(taskId, row);
       }
       this._updateRow(row, task, taskId, members);
-      ordered.push(row.root);
+      ordered.push({ node: row.root, group: this._dueGroup(task.attributes.next_due_date) });
     }
     for (const taskId of [...this._rows.keys()]) {
       if (!seen.has(taskId)) this._rows.delete(taskId);
     }
 
-    // Only touch this when the set of rows or their order actually changed.
-    // Taking a node out of the DOM drops focus, even if it goes straight back
-    // in.
-    const current = list.childNodes;
-    let changed = current.length !== ordered.length;
-    if (!changed) {
-      for (let index = 0; index < ordered.length; index += 1) {
-        if (current[index] !== ordered[index]) {
-          changed = true;
-          break;
-        }
-      }
+    if (this._config.group_by !== "due") {
+      this._groups.clear();
+      this._syncChildren(list, ordered.map((entry) => entry.node));
+      return;
     }
-    if (changed) list.replaceChildren(...ordered);
+
+    const containers = [];
+    for (const key of DUE_GROUPS) {
+      const nodes = ordered.filter((entry) => entry.group === key).map((entry) => entry.node);
+      if (!nodes.length) {
+        this._groups.delete(key);
+        continue;
+      }
+      let group = this._groups.get(key);
+      if (!group) {
+        const root = document.createElement("section");
+        root.className = `group group-${key}`;
+        const header = document.createElement("div");
+        header.className = "group-header";
+        header.setAttribute("role", "heading");
+        header.setAttribute("aria-level", "3");
+        const rows = document.createElement("div");
+        rows.className = "group-rows";
+        root.append(header, rows);
+        group = { root, header, rows };
+        this._groups.set(key, group);
+      }
+      group.header.textContent = this._t("group.count", { label: this._t(`group.${key}`), count: nodes.length });
+      this._syncChildren(group.rows, nodes);
+      containers.push(group.root);
+    }
+    this._syncChildren(list, containers);
+  }
+
+  _renderFilters(members) {
+    const { filters } = this._shell;
+    if (!this._config.show_filters) {
+      filters.hidden = true;
+      this._filterKey = null;
+      return;
+    }
+    filters.hidden = false;
+    const key = `${this._language}|${members.map((member) => `${member.user_id}:${member.display_name}`).join("|")}`;
+    if (this._filterKey !== key) {
+      this._filterKey = key;
+      const chip = (value, label) => {
+        const button = document.createElement("button");
+        button.className = "filter";
+        button.type = "button";
+        button.dataset.filter = value;
+        button.textContent = label;
+        return button;
+      };
+      filters.replaceChildren(
+        chip("all", this._t("filter.all")),
+        ...members.map((member) => chip(String(Number(member.user_id)), member.display_name)),
+        chip(UNASSIGNED, this._t("filter.unassigned")),
+      );
+    }
+    const active = this._filter === null ? "all" : String(this._filter);
+    for (const button of filters.querySelectorAll("button.filter")) {
+      const pressed = button.dataset.filter === active;
+      button.classList.toggle("selected", pressed);
+      button.setAttribute("aria-pressed", String(pressed));
+    }
   }
 
   _createDialog() {
     return createDialog({
       t: (key, params) => this._t(key, params),
+      mode: this._editTaskId === null ? "create" : "edit",
       onClose: () => this._closeDialog(),
       onSelectMember: (userId) => {
         this._selectedCreateUserId = userId;
         this._setFormError(null);
       },
-      onSubmit: (values) => this._createTask({ ...values, userId: this._selectedCreateUserId }),
+      onSubmit: (values) =>
+        this._editTaskId === null
+          ? this._createTask({ ...values, userId: this._selectedCreateUserId })
+          : this._updateTask(values),
       trapFocus: (event, section) => this._trapFocus(event, section),
     });
+  }
+
+  _fillDialog(dialog, draft) {
+    dialog.title.value = draft.title;
+    dialog.description.value = draft.description;
+    dialog.due.value = draft.due;
+    dialog.frequencyType.value = draft.frequencyType;
+    dialog.interval.value = draft.interval;
+    dialog.intervalUnit.value = draft.intervalUnit;
+    dialog.setWeekdays(draft.weekdays);
+    dialog.priority.value = draft.priority;
+    dialog.syncFrequencyFields();
   }
 
   // A language switch while the dialog is open: the labels are baked into the
@@ -803,11 +1217,16 @@ export class DonetickChoresCard extends HTMLElement {
     const old = this._dialog;
     const hadFocus = this.shadowRoot.activeElement && old.section.contains(this.shadowRoot.activeElement);
     const fresh = this._createDialog();
-    fresh.title.value = old.title.value;
-    fresh.description.value = old.description.value;
-    fresh.due.value = old.due.value;
-    fresh.frequencyType.value = old.frequencyType.value;
-    fresh.priority.value = old.priority.value;
+    this._fillDialog(fresh, {
+      title: old.title.value,
+      description: old.description.value,
+      due: old.due.value,
+      frequencyType: old.frequencyType.value,
+      interval: old.interval.value,
+      intervalUnit: old.intervalUnit.value,
+      weekdays: old.selectedWeekdays(),
+      priority: old.priority.value,
+    });
     this._dialog = fresh;
     this._shell.dialogHost.replaceChildren(fresh.backdrop);
     if (hadFocus) fresh.title.focus();
@@ -818,7 +1237,7 @@ export class DonetickChoresCard extends HTMLElement {
   _trapFocus(event, section) {
     const focusable = [...section.querySelectorAll(
       "button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled])",
-    )];
+    )].filter((element) => !element.closest("[hidden]"));
     if (!focusable.length) return;
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
@@ -881,6 +1300,8 @@ export class DonetickChoresCard extends HTMLElement {
     // every data update would wipe whatever the user has typed.
     if (!this._dialog) {
       this._dialog = this._createDialog();
+      // The edit dialog opens with the chore's current values in it.
+      if (this._editTaskId !== null) this._fillDialog(this._dialog, this._draft);
       dialogHost.replaceChildren(this._dialog.backdrop);
     }
     this._updateDialog(members);
@@ -890,8 +1311,9 @@ export class DonetickChoresCard extends HTMLElement {
     if (!this.shadowRoot || !this._config) return;
     this._ensureShell();
 
-    const { title, count, status, statusText, list, add } = this._shell;
+    const { card, title, count, status, statusText, list, add, more } = this._shell;
     title.textContent = this._config.title ?? this._t("card.title_default");
+    card.classList.toggle("compact", this._config.compact === true);
 
     if (!this._hass) {
       count.textContent = "";
@@ -899,6 +1321,9 @@ export class DonetickChoresCard extends HTMLElement {
       // click is worse than one that is visibly disabled.
       add.disabled = true;
       this._rows.clear();
+      this._groups.clear();
+      this._shell.filters.hidden = true;
+      more.hidden = true;
       list.replaceChildren(this._placeholder("loading", this._t("card.loading")));
       return;
     }
@@ -907,13 +1332,33 @@ export class DonetickChoresCard extends HTMLElement {
     const tasks = this._tasks();
     const members = this._members();
     this._pruneCompleted(tasks);
+    // Filtering first: it may drop a filter on a member who has left, and the
+    // chips must show that.
+    const filtered = this._filteredTasks(tasks, members);
+    this._renderFilters(members);
 
-    count.textContent = this._t("card.open_count", { count: tasks.length - this._completedTasks.size });
+    // The counter follows the filter: it names what the list shows.
+    const pending = filtered.filter((task) => {
+      const taskId = Number(task.attributes.task_id);
+      return this._completedTasks.has(taskId) || this._deletedTasks.has(taskId);
+    }).length;
+    count.textContent = this._t("card.open_count", { count: filtered.length - pending });
 
     statusText.textContent = this._statusMessage;
     status.hidden = !this._statusMessage;
 
-    this._renderRows(tasks, members);
+    const limit = this._config.max_items;
+    const truncated = limit !== undefined && filtered.length > limit;
+    const visible = truncated && !this._showAll ? filtered.slice(0, limit) : filtered;
+    more.hidden = !truncated;
+    if (truncated) {
+      more.textContent = this._showAll
+        ? this._t("card.show_less")
+        : this._t("card.show_more", { count: filtered.length - limit });
+      more.setAttribute("aria-expanded", String(this._showAll));
+    }
+
+    this._renderRows(visible, members);
     this._renderDialog(members);
   }
 }

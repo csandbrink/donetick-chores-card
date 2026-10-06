@@ -265,7 +265,7 @@ describe("Stylesheet rules", () => {
 
   test("every control offers a tap target of at least 44 px", () => {
     const text = css();
-    for (const selector of [".add", ".check", ".member", ".create-member"]) {
+    for (const selector of [".add", ".check", ".member", ".create-member", ".filter", ".row-action", ".weekday", ".more"]) {
       const size = hitArea(text, selector);
       assert.ok(size >= 44, `${selector} offers ${size}px, expected >= 44px`);
     }
@@ -403,7 +403,7 @@ describe("Hiding elements", () => {
   // not cascade shadow-root styles, so getComputedStyle would report "none"
   // here whether or not the override exists, and would have passed while the
   // bug was live.
-  const HIDDEN_CLASSES = ["status", "chooser", "form-error"];
+  const HIDDEN_CLASSES = ["status", "chooser", "form-error", "row-actions", "filters", "interval-row", "more", "weekdays", "due"];
 
   const stylesheet = () => {
     const env = loadCard({ adoptedStyleSheets: false });

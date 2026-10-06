@@ -1,8 +1,12 @@
 import { DonetickChoresCard } from "./card.js";
+import { DonetickChoresCardEditor } from "./editor.js";
 import { resolveLanguage, translate } from "./i18n.js";
 
 if (!customElements.get("donetick-chores-card")) {
   customElements.define("donetick-chores-card", DonetickChoresCard);
+}
+if (!customElements.get("donetick-chores-card-editor")) {
+  customElements.define("donetick-chores-card-editor", DonetickChoresCardEditor);
 }
 
 // The card picker entry is registered before any hass object exists. Home
