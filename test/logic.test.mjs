@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { loadCard, makeCard, makeHass, MEMBERS } from "./helpers.mjs";
+import { loadCard, makeCard, makeHass, MEMBERS, plain } from "./helpers.mjs";
 
 /** ISO timestamp for "n days from now, midday local time". Midday so that
  *  neither the time zone nor a DST switch can tip the calendar day over. */
@@ -205,5 +205,67 @@ describe("Card sizing", () => {
 
   test("reports grid options for the sections layout", () => {
     assert.deepEqual({ ...card().getGridOptions() }, { rows: "auto", columns: "full", min_columns: 6 });
+  });
+});
+
+describe("date-only due values", () => {
+  const localDay = (days) => {
+    const date = new Date();
+    date.setDate(date.getDate() + days);
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  };
+
+  test("YYYY-MM-DD is a calendar day in local time", () => {
+    const c = card();
+    assert.equal(c._dueText(localDay(0)), "Heute fällig");
+    assert.equal(c._dueText(localDay(1)), "Morgen fällig");
+    assert.equal(c._isOverdue(localDay(0)), false);
+    assert.equal(c._isOverdue(localDay(-1)), true);
+  });
+
+  test("a chore due earlier today is not shown as overdue", () => {
+    const c = card();
+    const earlier = new Date();
+    earlier.setHours(0, 0, 1, 0);
+    assert.equal(c._dueText(earlier.toISOString()), "Heute fällig");
+    assert.equal(c._isOverdue(earlier.toISOString()), false);
+  });
+
+  test("an unparsable due date neither crashes nor breaks the sort", () => {
+    const c = makeCard(loadCard());
+    c.hass = makeHass({
+      tasks: [
+        { id: 1, name: "Kaputt", due: "kein datum" },
+        { id: 2, name: "Spät", due: inDays(3) },
+        { id: 3, name: "Früh", due: inDays(1) },
+      ],
+    });
+    const names = c._tasks().map((task) => task.state);
+    assert.deepEqual(plain(names.slice(0, 2)), ["Früh", "Spät"]);
+  });
+});
+
+describe("setConfig validation", () => {
+  const set = (config) => () => card().setConfig(config);
+
+  test("rejects non-todo entities, wrong types and an empty prefix", () => {
+    assert.throws(set({ todo_entity: "sensor.x" }), /todo/);
+    assert.throws(set({ todo_entity: 5 }), /todo/);
+    assert.throws(set({ todo_entity: "todo.a", title: { a: 1 } }), /title/);
+    assert.throws(set({ todo_entity: "todo.a", sensor_prefix: "" }), /sensor_prefix/);
+    assert.throws(set({ todo_entity: "todo.a", sensor_prefix: 5 }), /sensor_prefix/);
+  });
+
+  test("accepts a valid config", () => {
+    assert.doesNotThrow(set({ todo_entity: "todo.a", title: "X", sensor_prefix: "sensor.y_" }));
+  });
+
+  test("a state without attributes does not break the list", () => {
+    const c = makeCard(loadCard());
+    const hass = makeHass({ tasks: [{ id: 1, name: "Ok" }] });
+    hass.states["sensor.donetick_chores_broken"] = { entity_id: "sensor.donetick_chores_broken", state: "x" };
+    assert.doesNotThrow(() => { c.hass = hass; });
+    assert.equal(c._tasks().length, 1);
   });
 });

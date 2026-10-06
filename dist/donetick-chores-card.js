@@ -118,6 +118,22 @@ function sharedStyleSheet() {
   return cachedStyleSheet;
 }
 
+const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+// Timestamp in ms, or null when the value is empty or unparsable. A bare
+// YYYY-MM-DD is a calendar day, not UTC midnight - new Date() would read it as
+// the latter and shift it by a day west of UTC.
+function parseDue(value) {
+  if (!value) return null;
+  const dateOnly = DATE_ONLY.exec(String(value));
+  const time = dateOnly
+    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3])).getTime()
+    : new Date(value).getTime();
+  return Number.isNaN(time) ? null : time;
+}
+
+const NO_USERS_MESSAGE = "Keine Donetick-Benutzer verfügbar. Bitte die Integration neu laden.";
+
 // <label>Text<control></label> - wrapping the control avoids a for/id pair,
 // which inside a shadow root would only ever be locally scoped anyway.
 function labelled(caption, control) {
@@ -142,12 +158,15 @@ class DonetickChoresCard extends HTMLElement {
     this._dialog = null;
     this._focusBeforeDialog = null;
     this._statusTimer = null;
+    this._pruneTimer = null;
   }
 
-  // Without this the timer still fires after the card has been removed from the
+  // Without this the timers still fire after the card has been removed from the
   // dashboard - switching views, or editing the dashboard.
   disconnectedCallback() {
     this._clearStatusTimer();
+    clearTimeout(this._pruneTimer);
+    this._pruneTimer = null;
   }
 
   _clearStatusTimer() {
@@ -163,7 +182,7 @@ class DonetickChoresCard extends HTMLElement {
   _setStatus(message, { autoDismiss = true } = {}) {
     this._clearStatusTimer();
     this._statusMessage = message;
-    if (!message || !autoDismiss) return;
+    if (!message || !autoDismiss || !this.isConnected) return;
     this._statusTimer = setTimeout(() => {
       this._statusTimer = null;
       this._statusMessage = "";
@@ -174,6 +193,16 @@ class DonetickChoresCard extends HTMLElement {
   setConfig(config) {
     if (!config || !config.todo_entity) {
       throw new Error("todo_entity ist erforderlich");
+    }
+    if (typeof config.todo_entity !== "string" || !config.todo_entity.startsWith("todo.")) {
+      throw new Error("todo_entity muss eine todo-Entität sein (todo.…)");
+    }
+    if (config.title !== undefined && typeof config.title !== "string") {
+      throw new Error("title muss ein Text sein");
+    }
+    if (config.sensor_prefix !== undefined &&
+        (typeof config.sensor_prefix !== "string" || !config.sensor_prefix)) {
+      throw new Error("sensor_prefix muss ein nicht leerer Text sein");
     }
     const previous = this._config;
     this._config = {
@@ -194,6 +223,8 @@ class DonetickChoresCard extends HTMLElement {
       this._completedTasks.clear();
       this._busyTaskIds.clear();
       this._setStatus("");
+      clearTimeout(this._pruneTimer);
+      this._pruneTimer = null;
     }
     this._render();
   }
@@ -202,7 +233,16 @@ class DonetickChoresCard extends HTMLElement {
     const previous = this._hass;
     this._hass = hass;
     if (previous && !this._relevantChange(previous, hass)) return;
-    if (this._dialogOpen) return;
+    if (this._dialogOpen) {
+      // Rebuilding would wipe what the user has typed, but the member list and
+      // the "no users" notice must not go stale while the dialog is open.
+      if (this._dialog && this._config) {
+        const members = this._members();
+        if (members.length && this._formError === NO_USERS_MESSAGE) this._formError = "";
+        this._updateDialog(members);
+      }
+      return;
+    }
     this._render();
   }
 
@@ -234,11 +274,14 @@ class DonetickChoresCard extends HTMLElement {
     return previousCount !== nextCount;
   }
 
-  // Masonry layout: height units of roughly 50 px. A header plus one row per
-  // chore is far closer to the real height than a constant.
   // How long a success message stays up, in milliseconds.
   static statusTimeoutMs = 8000;
 
+  // How long a booking is held as done locally before the sensor must have caught up.
+  static completedTimeoutMs = 120000;
+
+  // Masonry layout: height units of roughly 50 px. A header plus one row per
+  // chore is far closer to the real height than a constant.
   getCardSize() {
     return 1 + this._tasks().length;
   }
@@ -269,15 +312,17 @@ class DonetickChoresCard extends HTMLElement {
     return Object.values(this._hass.states)
       .filter((state) =>
         state.entity_id?.startsWith(this._config.sensor_prefix) &&
-        state.attributes.task_id != null &&
+        state.attributes?.task_id != null &&
         state.attributes.is_active !== false
       )
       .sort((a, b) => {
-        const dueA = a.attributes.next_due_date;
-        const dueB = b.attributes.next_due_date;
-        if (dueA && dueB) return new Date(dueA) - new Date(dueB);
-        if (dueA) return -1;
-        if (dueB) return 1;
+        // Unparsable dates sort like missing ones; NaN would break the
+        // comparator contract.
+        const dueA = parseDue(a.attributes.next_due_date);
+        const dueB = parseDue(b.attributes.next_due_date);
+        if (dueA !== null && dueB !== null) return dueA - dueB;
+        if (dueA !== null) return -1;
+        if (dueB !== null) return 1;
         return String(a.state).localeCompare(String(b.state), "de");
       });
   }
@@ -311,8 +356,9 @@ class DonetickChoresCard extends HTMLElement {
 
   _dueText(value) {
     if (!value) return "";
-    const due = new Date(value);
-    if (Number.isNaN(due.getTime())) return "Termin ungültig";
+    const time = parseDue(value);
+    if (time === null) return "Termin ungültig";
+    const due = new Date(time);
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
@@ -338,8 +384,15 @@ class DonetickChoresCard extends HTMLElement {
     );
   }
 
+  // Same day granularity as _dueText, so a chore labelled "Heute fällig" is
+  // never shown in the overdue colour.
   _isOverdue(value) {
-    return Boolean(value) && new Date(value).getTime() < Date.now();
+    const time = parseDue(value);
+    if (time === null) return false;
+    const due = new Date(time);
+    const now = new Date();
+    return new Date(due.getFullYear(), due.getMonth(), due.getDate()) <
+      new Date(now.getFullYear(), now.getMonth(), now.getDate());
   }
 
   async _createTask({ title, description, due, userId, frequencyType = "once", priority = 0 }) {
@@ -435,6 +488,7 @@ class DonetickChoresCard extends HTMLElement {
       return;
     }
     const task = this._tasks().find((candidate) => Number(candidate.attributes.task_id) === Number(taskId));
+    const sourceKey = `${this._config.todo_entity}|${this._config.sensor_prefix}`;
     const dueAtCompletion = task?.attributes?.next_due_date ?? null;
     const taskName = task?.state ?? "Aufgabe";
     const member = this._members().find((candidate) => Number(candidate.user_id) === Number(userId));
@@ -451,11 +505,21 @@ class DonetickChoresCard extends HTMLElement {
         data.assigned_to = assignedToId;
       }
       await this._hass.callService("donetick", "complete_chore", data);
+      // The card may have been pointed at another source while the call ran.
+      if (sourceKey !== `${this._config.todo_entity}|${this._config.sensor_prefix}`) return;
       this._expandedTaskId = null;
       // The coordinator only refreshes the sensor a moment later. Until then,
       // hold the row as done locally - otherwise nothing visibly happens and
       // the user books the chore a second time.
       this._completedTasks.set(Number(taskId), { dueAtCompletion, at: Date.now() });
+      // If Donetick stays silent no hass update arrives to prune the entry.
+      clearTimeout(this._pruneTimer);
+      this._pruneTimer = this.isConnected
+        ? setTimeout(() => {
+            this._pruneTimer = null;
+            this._render();
+          }, this.constructor.completedTimeoutMs + 100)
+        : null;
       this._setStatus(member
         ? `„${taskName}" – erledigt von ${member.display_name}.`
         : `„${taskName}" wurde als erledigt gebucht.`);
@@ -478,7 +542,7 @@ class DonetickChoresCard extends HTMLElement {
       const settled =
         !task ||
         (task.attributes.next_due_date ?? null) !== entry.dueAtCompletion ||
-        Date.now() - entry.at > 120000;
+        Date.now() - entry.at > this.constructor.completedTimeoutMs;
       if (settled) this._completedTasks.delete(taskId);
     }
   }
@@ -604,7 +668,7 @@ class DonetickChoresCard extends HTMLElement {
     this._setStatus("");
     this._formError = this._members().length
       ? (this._configEntryId() ? "" : "Die Donetick-Konfigurations-ID fehlt. Bitte die Integration neu laden.")
-      : "Keine Donetick-Benutzer verfügbar. Bitte die Integration neu laden.";
+      : NO_USERS_MESSAGE;
     this._render();
     this._dialog?.title.focus();
   }
@@ -877,6 +941,7 @@ class DonetickChoresCard extends HTMLElement {
     });
     backdrop.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
+        event.stopPropagation();
         this._closeDialog();
         return;
       }

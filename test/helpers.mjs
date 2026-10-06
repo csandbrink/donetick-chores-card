@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { after } from "node:test";
 import { JSDOM } from "jsdom";
 
 const SOURCE = new URL("../dist/donetick-chores-card.js", import.meta.url);
@@ -8,6 +9,13 @@ export const MEMBERS = [
   { user_id: 2, display_name: "Iduna", username: "iduna" },
   { user_id: 3, display_name: "Jakob", username: "jakob" },
 ];
+
+// The card keeps a 2-minute timer after a booking. Closing the windows at the
+// end of each test file clears those, so the test process exits right away.
+const openWindows = [];
+after(() => {
+  for (const window of openWindows) window.close();
+});
 
 /**
  * Loads the card into a fresh jsdom environment. The source runs in the window
@@ -32,6 +40,7 @@ export function loadCard({ adoptedStyleSheets = false } = {}) {
     });
   }
 
+  openWindows.push(window);
   window.eval(fs.readFileSync(SOURCE, "utf8"));
   return { dom, window, document: window.document };
 }

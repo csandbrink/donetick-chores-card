@@ -3,6 +3,30 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Due dates given as a bare `YYYY-MM-DD` are read as a local calendar day
+  instead of UTC midnight (off by one day west of UTC).
+- A chore due earlier today is no longer shown in the overdue colour while the
+  text says "Heute fällig"; both use day granularity now.
+- Chores with an unparsable `next_due_date` no longer break the sort order.
+- `setConfig` validates `todo_entity` (must be `todo.…`), `title` and
+  `sensor_prefix` (non-empty text) and reports mistakes instead of rendering
+  `[object Object]` or listing foreign sensors.
+- States without `attributes` no longer break the whole card.
+- A booking that finishes after the card was pointed at another source is
+  discarded; the "booked" state also expires without a further hass update.
+- The member list and the "no users" notice stay current while the create
+  dialog is open; Escape no longer propagates to Home Assistant.
+- No status timer is started on a card that was already removed.
+
+### Security / CI
+
+- Workflow: `permissions: contents: read`, concurrency group, push filter;
+  Dependabot for GitHub Actions and npm.
+
 ## [1.1.3] – 2026-09-08
 
 ### Fixed
