@@ -22,10 +22,32 @@ versioning follows [Semantic Versioning](https://semver.org/).
   dialog is open; Escape no longer propagates to Home Assistant.
 - No status timer is started on a card that was already removed.
 
+### Added
+
+- Release workflow: pushing a `v*` tag runs the checks, verifies the tag
+  against `package.json`, and publishes a GitHub release with
+  `dist/donetick-chores-card.js` attached and the matching changelog section
+  as release notes. Documented under "Release" in the README.
+- Tests for the `create_chore` error path, several cards on one page, a
+  source switch while a booking is in flight, member updates with the dialog
+  open, an invalid due date in the dialog, odd `assigned_to_user_id` values
+  (`0`, negative, string) and the expiry of the "booked" state without a hass
+  update. 98 tests now.
+
+### Changed
+
+- ESLint (`eslint:recommended`, flat config) with `npm run lint`, run in CI.
+  The two findings it raised - an unused catch binding in the card and an
+  unused import in a test - are fixed.
+- `.nvmrc` pins Node 22; the workflows read it instead of carrying their own
+  copy of the version.
+
 ### Security / CI
 
 - Workflow: `permissions: contents: read`, concurrency group, push filter;
   Dependabot for GitHub Actions and npm.
+- `npm audit --omit=dev --audit-level=high` in CI, so a runtime dependency
+  with a known vulnerability cannot slip in unnoticed.
 
 ## [1.1.3] – 2026-09-08
 

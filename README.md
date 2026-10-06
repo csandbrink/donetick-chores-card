@@ -108,12 +108,35 @@ The card is built to run all day on a wall-mounted tablet:
 ```bash
 npm install
 npm test      # test suite (jsdom)
+npm run lint  # ESLint
 npm run check # syntax check
 ```
 
-Requires Node 22.22.2 or newer. See [`test/README.md`](test/README.md) for how
-the tests are put together, and the [changelog](CHANGELOG.md) for what changed
-when.
+Requires Node 22.22.2 or newer (`.nvmrc` pins the major version for `nvm use`).
+See [`test/README.md`](test/README.md) for how the tests are put together, and
+the [changelog](CHANGELOG.md) for what changed when.
+
+## Release
+
+A release is a tag. Pushing one triggers
+[`release.yml`](.github/workflows/release.yml), which runs the checks and
+publishes a GitHub release with `dist/donetick-chores-card.js` attached. HACS
+picks the release up from there.
+
+1. Move the `[Unreleased]` entries in `CHANGELOG.md` under a new heading
+   `## [x.y.z] – YYYY-MM-DD`. The workflow takes that section as the release
+   notes and fails if it cannot find one.
+2. Set `"version"` in `package.json` to the same `x.y.z`. The workflow fails
+   if the tag and the package version disagree.
+3. Commit, then tag and push:
+
+   ```bash
+   git tag vx.y.z
+   git push origin main vx.y.z
+   ```
+
+The workflow is the only one with `contents: write`, and only on its release
+job. Everything else runs read-only.
 
 ## License
 

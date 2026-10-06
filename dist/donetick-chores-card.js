@@ -111,7 +111,7 @@ function sharedStyleSheet() {
       cachedStyleSheet = sheet;
       return cachedStyleSheet;
     }
-  } catch (error) {
+  } catch {
     // Older engines fall through to a <style> element below.
   }
   cachedStyleSheet = null;

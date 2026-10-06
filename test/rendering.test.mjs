@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { loadCard, makeCard, makeHass, withStates, rows, text, MEMBERS } from "./helpers.mjs";
+import { loadCard, makeCard, makeHass, withStates, rows, text } from "./helpers.mjs";
 
 describe("Rendering", () => {
   test("shows chores with name and due date", () => {
@@ -100,6 +100,31 @@ describe("Rendering", () => {
     const env = loadCard();
     const card = makeCard(env);
     card.hass = makeHass({ tasks: [{ id: 1, assignedTo: 2 }] });
+    assert.equal(text(card.shadowRoot.querySelector(".assignee-initial")), "I");
+  });
+
+  test("assigned_to_user_id of 0, a negative number or junk means nobody", () => {
+    // Donetick reports "unassigned" as 0; a negative id or a non-numeric string
+    // can only be a broken attribute. None of them may match a member.
+    const env = loadCard();
+    const card = makeCard(env);
+    card.hass = makeHass({
+      tasks: [
+        { id: 1, assignedTo: 0 },
+        { id: 2, assignedTo: -1 },
+        { id: 3, assignedTo: "wer?" },
+      ],
+    });
+    for (const row of rows(card)) {
+      assert.equal(row.querySelector(".assignee-initial"), null);
+      assert.ok(row.querySelector("ha-icon[icon='mdi:checkbox-blank-circle-outline']"));
+    }
+  });
+
+  test("assigned_to_user_id as a numeric string still finds the member", () => {
+    const env = loadCard();
+    const card = makeCard(env);
+    card.hass = makeHass({ tasks: [{ id: 1, assignedTo: "2" }] });
     assert.equal(text(card.shadowRoot.querySelector(".assignee-initial")), "I");
   });
 

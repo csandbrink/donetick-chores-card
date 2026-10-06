@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: GitHub release
+    runs-on: ubuntu-latest
+    # The only job that writes to the repository: it creates the release and
+    # uploads the asset. Everything else stays read-only.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Syntax check
+        run: npm run check
+      - name: Lint
+        run: npm run lint
+      - name: Test suite
+        run: npm test
+
+      - name: Check that the tag matches package.json
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(node -p 'require("./package.json").version')"
+          if [ "$tag" != "$version" ]; then
+            echo "Tag v$tag does not match package.json version $version" >&2
+            exit 1
+          fi
+
+      - name: Extract release notes from CHANGELOG.md
+        # Everything between the heading of this version and the next "## "
+        # heading. An empty result fails the release: a tag without a changelog
+        # entry is a mistake worth catching here rather than in the release page.
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v version="$version" '
+            /^## \[/ { if (found) exit; found = index($0, "[" version "]") > 0; next }
+            found { print }
+          ' CHANGELOG.md | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "No CHANGELOG.md section for version $version" >&2
+            exit 1
+          fi
+          cat release-notes.md
+
+      - name: Create the release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          body_path: release-notes.md
+          files: dist/donetick-chores-card.js
+          fail_on_unmatched_files: true

@@ -7,9 +7,13 @@
   "type": "module",
   "scripts": {
     "test": "node --test test/*.test.mjs",
-    "check": "node --check dist/donetick-chores-card.js"
+    "check": "node --check dist/donetick-chores-card.js",
+    "lint": "eslint ."
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.12.0",
+    "globals": "^17.13.0",
     "jsdom": "^30.0.1"
   },
   "engines": {

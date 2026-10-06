@@ -10,7 +10,17 @@ Requires **Node 22.22.2 or newer** — that's what jsdom 30 needs.
 ```bash
 npm install
 npm test
+npm run lint   # ESLint over the card and the tests
 ```
+
+CI runs the same three commands (`check`, `lint`, `test`) plus an
+`npm audit` over runtime dependencies - of which there are none, so that step
+only ever catches a package added by mistake.
+
+Two card timeouts are static class properties (`statusTimeoutMs`,
+`completedTimeoutMs`) so tests can shorten them. `loadCard()` gives every test
+its own window and therefore its own copy of the class, so changing one does
+not leak into another test.
 
 ## Layout
 
