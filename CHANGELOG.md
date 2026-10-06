@@ -24,6 +24,20 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **English.** The card's interface is available in German and English. It
+  follows the Home Assistant user's language (`hass.locale.language`, or
+  `hass.language` on older frontends; `de-CH` counts as German, `en-GB` as
+  English, anything the card lacks as English) and switches at runtime when
+  that setting changes, re-translating what is on screen and keeping the input
+  of an open dialog. Without any language information the card stays German.
+  The new `language` option (`de` or `en`) forces a language; `setConfig`
+  rejects anything else. Dates are formatted for the language. All interface
+  text, including aria-labels, error and status messages, lives in
+  `src/locales/`; a missing key falls back to German. Adding a language means
+  adding one file - documented in the README.
+- Tests for the English output, the language selection, the `language`
+  option, the runtime switch, and that every locale file carries exactly the
+  same keys. 131 tests now.
 - Release workflow: pushing a `v*` tag runs the checks, verifies the tag
   against `package.json`, and publishes a GitHub release with
   `dist/donetick-chores-card.js` attached and the matching changelog section
@@ -32,10 +46,20 @@ versioning follows [Semantic Versioning](https://semver.org/).
   source switch while a booking is in flight, member updates with the dialog
   open, an invalid due date in the dialog, odd `assigned_to_user_id` values
   (`0`, negative, string) and the expiry of the "booked" state without a hass
-  update. 98 tests now.
+  update.
 
 ### Changed
 
+- **The source now lives in `src/`** as ES modules (`index.js`, `card.js`,
+  `dialog.js`, `styles.js`, `dates.js`, `i18n.js`, `locales/`), bundled by
+  esbuild into the single, unminified `dist/donetick-chores-card.js` that Home
+  Assistant loads. `dist/` stays committed for HACS; `npm run build` produces
+  it, `npm test` builds before running, and CI fails when the committed file
+  does not match `src/`. The release workflow builds and checks the same way.
+  No change in behaviour or configuration.
+- ESLint lints `src/` as browser ES modules and ignores the generated `dist/`.
+- The card picker entry ("Donetick Chores") follows the language of the page
+  (`<html lang>`), which Home Assistant sets to the user's language.
 - ESLint (`eslint:recommended`, flat config) with `npm run lint`, run in CI.
   The two findings it raised - an unused catch binding in the card and an
   unused import in a test - are fixed.

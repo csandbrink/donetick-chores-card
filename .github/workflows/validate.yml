@@ -41,6 +41,13 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Build is up to date
+        # dist/ is committed because HACS serves it straight from the
+        # repository. A change to src/ without a rebuilt dist/ would ship
+        # stale code, so the committed file must match what src/ produces.
+        run: git diff --exit-code dist/
       - name: Syntax check
         run: npm run check
       - name: Lint

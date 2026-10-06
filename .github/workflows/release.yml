@@ -22,6 +22,11 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Build is up to date
+        # The released file is the committed one; it must match src/.
+        run: git diff --exit-code dist/
       - name: Syntax check
         run: npm run check
       - name: Lint

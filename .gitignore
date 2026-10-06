@@ -7,5 +7,5 @@
 .idea/
 *.swp
 
-# Node (falls spaeter ein Build dazukommt)
+# Node. dist/ is generated but deliberately committed - HACS serves it.
 node_modules/

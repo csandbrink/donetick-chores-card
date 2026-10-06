@@ -7,7 +7,8 @@ Donetick tracks who completed what. Most task cards don't — they assume the
 person tapping the screen is the person who did the work. On a shared wall
 tablet that assumption is wrong most of the time.
 
-The card's interface is in German.
+The card's interface is available in German and English. It follows the
+language set in Home Assistant, or the `language` option.
 
 ## What it does
 
@@ -66,8 +67,24 @@ todo_entity: todo.all_tasks
 | --- | --- | --- | --- | --- |
 | `type` | string | yes | – | `custom:donetick-chores-card` |
 | `todo_entity` | string | yes | – | The Donetick integration's todo entity. Supplies `circle_members` and `config_entry_id`. |
-| `title` | string | no | `Aufgaben` | Heading shown on the card |
+| `title` | string | no | `Aufgaben` / `Chores` | Heading shown on the card; the default follows the language |
 | `sensor_prefix` | string | no | `sensor.donetick_chores_` | Prefix used to find the chore sensors |
+| `language` | `de` \| `en` | no | – | Forces the card's language. Without it the card follows Home Assistant (see below). |
+
+### Language
+
+The card picks its language in this order:
+
+1. The `language` option, when set. Anything other than `de` or `en` is
+   rejected by `setConfig`.
+2. The language of the Home Assistant user (`hass.locale.language`, or
+   `hass.language` on older frontends). Only the part before the dash counts,
+   so `de-CH` is German and `en-GB` is English. A language the card has no
+   translation for falls back to English.
+3. German, when Home Assistant provides no language information at all.
+
+A language change in Home Assistant's profile settings takes effect without a
+reload; an open dialog keeps what was typed into it.
 
 ### Recurrence
 
@@ -84,6 +101,7 @@ type: custom:donetick-chores-card
 todo_entity: todo.all_tasks
 title: Haushalt
 sensor_prefix: sensor.donetick_chores_
+language: de
 ```
 
 ## Accessibility and tablets
@@ -105,16 +123,52 @@ The card is built to run all day on a wall-mounted tablet:
 
 ## Development
 
+The source lives in `src/` as ES modules; `dist/donetick-chores-card.js` is
+generated from it by [esbuild](https://esbuild.github.io/) and is what Home
+Assistant loads. HACS serves that file straight from the repository, so it is
+committed - CI fails when it does not match `src/`.
+
 ```bash
 npm install
-npm test      # test suite (jsdom)
-npm run lint  # ESLint
-npm run check # syntax check
+npm run build # src/ → dist/donetick-chores-card.js
+npm test      # builds first, then runs the test suite (jsdom) against dist/
+npm run lint  # ESLint over src/, the tests and the build script
+npm run check # syntax check of the built file
 ```
+
+The workflow is: edit `src/`, run `npm test`, commit `src/` **and** the
+rebuilt `dist/` together. Never edit `dist/` by hand - the next build would
+overwrite it.
+
+| File | Holds |
+| --- | --- |
+| `src/index.js` | Element registration and the card picker entry |
+| `src/card.js` | The card itself: state, rendering, service calls |
+| `src/dialog.js` | The "new chore" dialog markup and the recurrence list |
+| `src/styles.js` | The stylesheet, shared across card instances |
+| `src/dates.js` | Due date parsing and day arithmetic |
+| `src/i18n.js` | Language selection and translation lookup |
+| `src/locales/*.js` | One translation table per language |
+| `scripts/build.mjs` | The esbuild call behind `npm run build` |
 
 Requires Node 22.22.2 or newer (`.nvmrc` pins the major version for `nvm use`).
 See [`test/README.md`](test/README.md) for how the tests are put together, and
 the [changelog](CHANGELOG.md) for what changed when.
+
+### Contributing a translation
+
+1. Copy `src/locales/en.js` to `src/locales/<code>.js` (`<code>` being the
+   two-letter language code Home Assistant uses, e.g. `nl`) and translate
+   every value. Keep the keys and the `{placeholders}` exactly as they are;
+   set `locale` to the BCP 47 tag used for date formatting and sorting.
+2. Import the file in `src/i18n.js` and add it to `LOCALES`.
+3. Run `npm test`. A test checks that every language carries exactly the same
+   keys as `de.js`, so a forgotten line is caught right away.
+4. Mention the language in the README's `language` option, rebuild and commit
+   `dist/` along with the source.
+
+A key missing from a language falls back to the German text rather than
+breaking the card.
 
 ## Release
 

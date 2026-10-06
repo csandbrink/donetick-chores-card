@@ -9,11 +9,18 @@ Requires **Node 22.22.2 or newer** — that's what jsdom 30 needs.
 
 ```bash
 npm install
-npm test
-npm run lint   # ESLint over the card and the tests
+npm test       # builds dist/ first (pretest), then runs the suite against it
+npm run lint   # ESLint over src/, the tests and the build script
 ```
 
-CI runs the same three commands (`check`, `lint`, `test`) plus an
+The tests load the **built** file, `dist/donetick-chores-card.js`, not the
+modules in `src/` - that is the file Home Assistant runs, and the bundle is
+what has to work. `npm test` rebuilds it first, so a change in `src/` is always
+tested. Only `i18n.test.mjs` imports from `src/` directly, for the pure
+functions in `i18n.js` and the locale tables.
+
+CI runs `build`, checks that the committed `dist/` matches
+(`git diff --exit-code dist/`), then `check`, `lint`, `test` and an
 `npm audit` over runtime dependencies - of which there are none, so that step
 only ever catches a package added by mistake.
 
@@ -30,6 +37,15 @@ not leak into another test.
 | `rendering.test.mjs` | Rendering, stylesheet handling, DOM stability, stylesheet rules |
 | `interaction.test.mjs` | Completing chores, the dialog, error paths, status messages |
 | `logic.test.mjs` | Date and initial handling, change detection, post-booking follow-up |
+| `i18n.test.mjs` | Locale key parity, language selection, English output, language switch at runtime |
+
+## Language in tests
+
+A hass object built by `makeHass()` carries no language information, so the
+card renders in German - every test written before the card learned English
+holds unchanged. English is requested the way the Home Assistant frontend does
+it: `{ ...makeHass(...), locale: { language: "en" } }`, or through the
+`language` config option.
 
 ## Why `withStates`
 
