@@ -37,21 +37,8 @@ describe("Completing chores", () => {
     assert.deepEqual(plain(hass.calls[0]), {
       domain: "donetick",
       service: "complete_chore",
-      data: { chore_id: 7, completed_by: 3, config_entry_id: "CONFIG_ENTRY_1", assigned_to: 2 },
+      data: { chore_id: 7, completed_by: 3, config_entry_id: "CONFIG_ENTRY_1" },
     });
-  });
-
-  test("assigned_to is omitted when nobody is assigned", async () => {
-    const env = loadCard();
-    const card = makeCard(env);
-    const hass = makeHass({ tasks: [{ id: 7 }] });
-    card.hass = hass;
-
-    card.shadowRoot.querySelector("button.check").click();
-    card.shadowRoot.querySelector("button.member").click();
-    await flush();
-
-    assert.equal("assigned_to" in hass.calls[0].data, false);
   });
 
   test("after booking: row marked, button disabled, acknowledgement shown", async () => {

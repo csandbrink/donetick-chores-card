@@ -3,6 +3,16 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.1.4] – 2026-11-12
+
+### Changed
+
+- **Completing a chore no longer sends `assigned_to`.** The card called
+  `complete_chore` with the chore's current assignee so the integration could
+  act as that person. With an admin or manager token that is not needed: the
+  server books the completion for whoever is picked in `completed_by`. The
+  assignee stays as it was.
+
 ## [1.1.3] – 2026-09-08
 
 ### Fixed

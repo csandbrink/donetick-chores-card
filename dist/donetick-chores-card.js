@@ -418,12 +418,11 @@ class DonetickChoresCard extends HTMLElement {
     }
   }
 
-  async _complete(taskId, userId, assignedTo = null) {
+  async _complete(taskId, userId) {
     if (this._busyTaskIds.has(Number(taskId))) return;
     if (this._completedTasks.has(Number(taskId))) return;
     const configEntryId = this._configEntryId();
     const memberExists = this._members().some((member) => Number(member.user_id) === Number(userId));
-    const assignedToId = Number(assignedTo);
     if (!configEntryId) {
       this._setStatus("Die Donetick-Konfigurations-ID fehlt. Bitte die Integration neu laden.", { autoDismiss: false });
       this._render();
@@ -447,9 +446,6 @@ class DonetickChoresCard extends HTMLElement {
         completed_by: Number(userId),
         config_entry_id: configEntryId,
       };
-      if (Number.isInteger(assignedToId) && assignedToId > 0) {
-        data.assigned_to = assignedToId;
-      }
       await this._hass.callService("donetick", "complete_chore", data);
       this._expandedTaskId = null;
       // The coordinator only refreshes the sensor a moment later. Until then,
@@ -585,12 +581,7 @@ class DonetickChoresCard extends HTMLElement {
       }
       const member = event.target.closest?.("button.member");
       if (member && !member.disabled) {
-        const assignedTo = Number(member.dataset.assignedToUserId);
-        this._complete(
-          Number(member.dataset.taskId),
-          Number(member.dataset.userId),
-          Number.isInteger(assignedTo) && assignedTo > 0 ? assignedTo : null,
-        );
+        this._complete(Number(member.dataset.taskId), Number(member.dataset.userId));
       }
     });
   }
@@ -679,7 +670,6 @@ class DonetickChoresCard extends HTMLElement {
     const due = task.attributes.next_due_date;
 
     const assignedToId = Number(task.attributes.assigned_to_user_id);
-    const assignedTo = Number.isInteger(assignedToId) && assignedToId > 0 ? assignedToId : null;
     const assignedMember = members.find((member) => Number(member.user_id) === assignedToId);
     const assignedInitial = assignedMember ? this._memberInitial(assignedMember, members) : null;
 
@@ -713,7 +703,7 @@ class DonetickChoresCard extends HTMLElement {
       return;
     }
 
-    const chooserKey = `${members.map((member) => `${member.user_id}:${member.display_name}`).join("|")}#${assignedTo}#${busy}`;
+    const chooserKey = `${members.map((member) => `${member.user_id}:${member.display_name}`).join("|")}#${busy}`;
     if (row.chooserKey === chooserKey) return;
     row.chooserKey = chooserKey;
 
@@ -723,7 +713,6 @@ class DonetickChoresCard extends HTMLElement {
       button.type = "button";
       button.dataset.taskId = String(taskId);
       button.dataset.userId = String(Number(member.user_id));
-      button.dataset.assignedToUserId = assignedTo == null ? "" : String(assignedTo);
       button.title = member.display_name;
       button.setAttribute("aria-label", `Erledigt von ${member.display_name}`);
       button.disabled = busy;
