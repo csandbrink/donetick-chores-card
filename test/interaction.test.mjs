@@ -241,7 +241,7 @@ describe("Dialog", () => {
     assert.equal(dialog.description.value, "and described");
   });
 
-  test("saving sends create_chore with the expected fields", async () => {
+  test("saving sends create_task with the expected fields", async () => {
     const env = loadCard();
     const card = makeCard(env);
     const hass = makeHass({ tasks: [] });
@@ -250,6 +250,7 @@ describe("Dialog", () => {
 
     dialog.title.value = "  Fenster putzen  ";
     dialog.description.value = "  and inside too  ";
+    dialog.due.value = "2026-09-20T18:30";
     dialog.frequencyType.value = "weekly";
     dialog.priority.value = "3";
     dialog.memberBox.querySelectorAll("button.create-member")[1].click();
@@ -258,20 +259,22 @@ describe("Dialog", () => {
 
     assert.equal(hass.calls.length, 1);
     const { data } = hass.calls[0];
-    assert.equal(hass.calls[0].service, "create_chore");
+    assert.equal(hass.calls[0].domain, "donetick");
+    assert.equal(hass.calls[0].service, "create_task");
+    assert.deepEqual(Object.keys(data).sort(), [
+      "assigned_to", "config_entry_id", "description", "due_date", "frequency_type", "name", "priority",
+    ]);
     assert.equal(data.name, "Fenster putzen");
     assert.equal(data.description, "and inside too");
     assert.equal(data.frequency_type, "weekly");
-    assert.equal(data.frequency, 1, "repeat interval for recurring chores");
     assert.equal(data.priority, 3);
-    assert.equal(data.assign_strategy, "keep_last_assigned");
-    assert.deepEqual(plain(data.assignee_ids), [2]);
     assert.equal(data.assigned_to, 2);
+    assert.equal(data.due_date, new env.window.Date("2026-09-20T18:30").toISOString());
     assert.equal(card._dialog, null, "dialog closed after success");
     assert.match(text(card.shadowRoot.querySelector(".status")), /hinzugefügt/);
   });
 
-  test("no repeat interval is sent for a one-off chore", async () => {
+  test("a one-off chore sends no repeat fields and no assignee", async () => {
     const env = loadCard();
     const card = makeCard(env);
     const hass = makeHass({ tasks: [] });
@@ -282,9 +285,38 @@ describe("Dialog", () => {
     dialog.section.querySelector("form").dispatchEvent(new env.window.Event("submit", { cancelable: true }));
     await flush();
 
-    assert.equal(hass.calls[0].data.frequency_type, "once");
-    assert.equal("frequency" in hass.calls[0].data, false);
-    assert.equal(hass.calls[0].data.assign_strategy, "no_assignee");
+    assert.equal(hass.calls[0].service, "create_task");
+    assert.deepEqual(Object.keys(hass.calls[0].data).sort(), [
+      "config_entry_id", "description", "name", "priority",
+    ]);
+  });
+
+  test("a recurring chore without a due date is not sent", async () => {
+    const env = loadCard();
+    const card = makeCard(env);
+    const hass = makeHass({ tasks: [] });
+    card.hass = hass;
+    const dialog = open(card);
+
+    dialog.title.value = "Blumen gießen";
+    dialog.frequencyType.value = "daily";
+    dialog.section.querySelector("form").dispatchEvent(new env.window.Event("submit", { cancelable: true }));
+    await flush();
+
+    assert.equal(hass.calls.length, 0);
+    assert.match(text(card.shadowRoot), /Fälligkeitsdatum angeben/);
+    assert.notEqual(card._dialog, null, "dialog stays open");
+  });
+
+  test("offers Donetick's priorities 0 to 4", () => {
+    const env = loadCard();
+    const card = makeCard(env);
+    card.hass = makeHass({ tasks: [] });
+    const dialog = open(card);
+    assert.deepEqual(
+      [...dialog.priority.options].map((option) => option.value),
+      ["0", "1", "2", "3", "4"],
+    );
   });
 
   test("offers monthly and yearly as well", () => {

@@ -3,6 +3,20 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.1.5] – 2026-11-13
+
+### Changed
+
+- **Adding a chore goes through `create_task` instead of `create_chore`.**
+  `create_chore` only exists in the `fullapi-chores` branch of the integration;
+  `create_task` is the integration's own action and now takes a repeat schedule
+  and a priority as well. The card sends `name`, `description`, `due_date`,
+  `assigned_to`, `priority` and, for a repeating chore, `frequency_type`.
+- **Priority offers Donetick's levels:** none, P1 (urgent) to P4 (low). The
+  dialog used to offer 0 to 5, and Donetick rejects 5.
+- **A repeating chore needs a due date.** Donetick counts the repeats from the
+  first due date, so the dialog asks for one instead of failing on save.
+
 ## [1.1.4] – 2026-11-12
 
 ### Changed

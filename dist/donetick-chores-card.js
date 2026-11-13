@@ -1,7 +1,7 @@
 // The picker and the validation share this list so the two cannot drift apart.
-// donetick.create_chore knows further types (adaptive, interval,
-// days_of_the_week, ...), but each of them also needs frequency_metadata and
-// makes no sense without a field to fill that in.
+// donetick.create_task knows further types (adaptive, interval,
+// days_of_the_week, ...), but each of them needs further fields (interval,
+// weekdays, months) and makes no sense without a way to fill those in.
 const FREQUENCY_TYPES = [
   { value: "once", label: "Einmalig" },
   { value: "daily", label: "Täglich" },
@@ -10,6 +10,14 @@ const FREQUENCY_TYPES = [
   { value: "yearly", label: "Jährlich" },
 ];
 const FREQUENCY_VALUES = new Set(FREQUENCY_TYPES.map((entry) => entry.value));
+// Donetick's priority levels: 0 for none, then 1 (urgent) to 4 (low).
+const PRIORITIES = [
+  { value: 0, label: "Keine" },
+  { value: 1, label: "P1 – dringend" },
+  { value: 2, label: "P2 – hoch" },
+  { value: 3, label: "P3 – mittel" },
+  { value: 4, label: "P4 – niedrig" },
+];
 
 // Parsed once per page and shared by every card instance, rather than written
 // into the shadow root again on every render.
@@ -359,7 +367,7 @@ class DonetickChoresCard extends HTMLElement {
       ? this._draft.frequencyType
       : "once";
     const parsedPriority = Number(this._draft.priority);
-    const resolvedPriority = Number.isInteger(parsedPriority) && parsedPriority >= 0 && parsedPriority <= 5
+    const resolvedPriority = Number.isInteger(parsedPriority) && parsedPriority >= 0 && parsedPriority <= 4
       ? parsedPriority
       : 0;
     if (!cleanTitle) {
@@ -383,6 +391,13 @@ class DonetickChoresCard extends HTMLElement {
       this._render();
       return;
     }
+    if (resolvedFrequencyType !== "once" && !parsedDue) {
+      // Donetick counts the repeats from the first due date, so the
+      // integration refuses a repeating chore without one.
+      this._formError = "Für eine Wiederholung bitte ein Fälligkeitsdatum angeben.";
+      this._render();
+      return;
+    }
     this._busyCreate = true;
     this._formError = "";
     this._render();
@@ -390,21 +405,15 @@ class DonetickChoresCard extends HTMLElement {
       const data = {
         name: cleanTitle,
         description: String(description || "").trim(),
-        frequency_type: resolvedFrequencyType,
-        assign_strategy: selectedUser ? "keep_last_assigned" : "no_assignee",
         priority: resolvedPriority,
-        is_rolling: false,
         config_entry_id: configEntryId,
       };
-      if (selectedUser) {
-        data.assignee_ids = [Number(selectedUser.user_id)];
-        data.assigned_to = Number(selectedUser.user_id);
-      }
-      // frequency is the repeat interval and only means anything for recurring
-      // chores; for "once" Donetick has no use for it.
-      if (resolvedFrequencyType !== "once") data.frequency = 1;
-      if (parsedDue) data.next_due_date = parsedDue.toISOString();
-      await this._hass.callService("donetick", "create_chore", data);
+      if (selectedUser) data.assigned_to = Number(selectedUser.user_id);
+      // A one-off chore is what create_task makes anyway, so the repeat
+      // fields are only sent for a recurring one.
+      if (resolvedFrequencyType !== "once") data.frequency_type = resolvedFrequencyType;
+      if (parsedDue) data.due_date = parsedDue.toISOString();
+      await this._hass.callService("donetick", "create_task", data);
       this._dialogOpen = false;
       this._selectedCreateUserId = null;
       this._draft = { title: "", description: "", due: "", frequencyType: "once", priority: "0" };
@@ -815,10 +824,10 @@ class DonetickChoresCard extends HTMLElement {
 
     const priority = document.createElement("select");
     priority.name = "priority";
-    for (const value of [0, 1, 2, 3, 4, 5]) {
+    for (const entry of PRIORITIES) {
       const option = document.createElement("option");
-      option.value = String(value);
-      option.textContent = String(value);
+      option.value = String(entry.value);
+      option.textContent = entry.label;
       priority.append(option);
     }
 

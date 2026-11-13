@@ -17,7 +17,7 @@ The card's interface is in German.
   `completed_by`
 - If a chore is already assigned to someone, the circle shows their initial
 - A dialog for adding chores — title, description, due date, recurrence,
-  priority, assignee — through `donetick.create_chore`
+  priority, assignee — through `donetick.create_task`
 - Initials expand to two characters when two members share a first letter
 - Booked chores stay visibly marked until Donetick confirms, so nobody ticks
   the same chore twice out of uncertainty
@@ -29,7 +29,8 @@ The **Donetick integration** for Home Assistant, providing:
 - one sensor per chore, prefixed `sensor.donetick_chores_`, with the attributes
   `task_id`, `is_active`, `next_due_date` and `assigned_to_user_id`
 - a todo entity carrying `circle_members` and `config_entry_id`
-- the services `donetick.complete_chore` and `donetick.create_chore`
+- the services `donetick.complete_chore` and `donetick.create_task`, the latter
+  with repeat schedule and priority
 
 The API token configured in the integration must belong to a **circle admin or
 manager**. Without it, completing someone else's chore fails.
@@ -72,10 +73,11 @@ todo_entity: todo.all_tasks
 ### Recurrence
 
 The dialog offers *once*, *daily*, *weekly*, *monthly* and *yearly*. The
-remaining `donetick.create_chore` types (`adaptive`, `interval`,
-`days_of_the_week`, `day_of_the_month`, …) all need `frequency_metadata` as
-well. Offering them without fields to fill that in would mean offering choices
-that then don't work.
+remaining `donetick.create_task` types (`adaptive`, `interval`,
+`days_of_the_week`, `day_of_the_month`, …) all need further fields (interval,
+weekdays, months). Offering them without fields to fill those in would mean
+offering choices that then don't work. A repeating chore needs a due date for
+its first occurrence; the dialog asks for one before saving.
 
 ### Full example
 
