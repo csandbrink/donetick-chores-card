@@ -3,6 +3,16 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.1.6] – 2026-11-13
+
+### Fixed
+
+- **A chore added without a person was assigned to the token owner.**
+  `create_task` keeps the creator assigned when `assigned_to` is missing, and
+  the creator is the owner of the integration's API token. The card now sends
+  `assigned_to: null` in that case, which Donetick stores as "Anyone", as it
+  did with `create_chore`.
+
 ## [1.1.5] – 2026-11-13
 
 ### Changed

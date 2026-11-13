@@ -274,7 +274,7 @@ describe("Dialog", () => {
     assert.match(text(card.shadowRoot.querySelector(".status")), /hinzugefügt/);
   });
 
-  test("a one-off chore sends no repeat fields and no assignee", async () => {
+  test("a one-off chore without a person sends no repeat fields and assigned_to null", async () => {
     const env = loadCard();
     const card = makeCard(env);
     const hass = makeHass({ tasks: [] });
@@ -287,8 +287,9 @@ describe("Dialog", () => {
 
     assert.equal(hass.calls[0].service, "create_task");
     assert.deepEqual(Object.keys(hass.calls[0].data).sort(), [
-      "config_entry_id", "description", "name", "priority",
+      "assigned_to", "config_entry_id", "description", "name", "priority",
     ]);
+    assert.equal(hass.calls[0].data.assigned_to, null, "null means Anyone, not the token owner");
   });
 
   test("a recurring chore without a due date is not sent", async () => {

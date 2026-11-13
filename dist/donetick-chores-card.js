@@ -406,9 +406,11 @@ class DonetickChoresCard extends HTMLElement {
         name: cleanTitle,
         description: String(description || "").trim(),
         priority: resolvedPriority,
+        // Without assigned_to, create_task leaves the chore with its creator,
+        // the owner of the API token. null asks for "Anyone" instead.
+        assigned_to: selectedUser ? Number(selectedUser.user_id) : null,
         config_entry_id: configEntryId,
       };
-      if (selectedUser) data.assigned_to = Number(selectedUser.user_id);
       // A one-off chore is what create_task makes anyway, so the repeat
       // fields are only sent for a recurring one.
       if (resolvedFrequencyType !== "once") data.frequency_type = resolvedFrequencyType;
