@@ -37,7 +37,7 @@ describe("Completing chores", () => {
     assert.deepEqual(plain(hass.calls[0]), {
       domain: "donetick",
       service: "complete_chore",
-      data: { chore_id: 7, completed_by: 3, config_entry_id: "CONFIG_ENTRY_1" },
+      data: { task_id: 7, completed_by: 3, config_entry_id: "CONFIG_ENTRY_1" },
     });
   });
 
@@ -116,7 +116,7 @@ describe("Completing chores", () => {
     rows(card)[1].querySelector("button.member").click();
     await flush();
     assert.equal(hass.calls.length, 2);
-    assert.equal(hass.calls[1].data.chore_id, 2);
+    assert.equal(hass.calls[1].data.task_id, 2);
 
     release();
   });

@@ -453,7 +453,7 @@ class DonetickChoresCard extends HTMLElement {
     this._render();
     try {
       const data = {
-        chore_id: Number(taskId),
+        task_id: Number(taskId),
         completed_by: Number(userId),
         config_entry_id: configEntryId,
       };

@@ -3,6 +3,16 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.1.7] – 2026-11-16
+
+### Changed
+
+- **Completing a chore sends `task_id` instead of `chore_id`.** The
+  integration's `complete_chore` action now takes the task the same way as
+  `update_task`: from a searchable Task picker or as `task_id`. `chore_id` is
+  gone, so this card needs an integration with that change, and an older card
+  fails against it. Update both together.
+
 ## [1.1.6] – 2026-11-13
 
 ### Fixed
